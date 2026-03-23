@@ -119,7 +119,7 @@ def echanger_avec_serveur():
             msg, couleur = "🎉 Vous gagnez !", VERT
             score_c += 1
         else:
-            msg, couleur = "😢 L'ami gagne !", ROUGE
+            msg, couleur = "😢 Votre adversaire gagne !", ROUGE
             score_s += 1
 
         fenetre.after(0, lambda: label_resultat.config(text=msg, fg=couleur))
