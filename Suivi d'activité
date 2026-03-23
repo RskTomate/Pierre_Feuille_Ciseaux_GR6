@@ -13,5 +13,7 @@ SUIVI D’ACTIVITE pierre-feuille-ciseaux
 -	Création des premiers fichiers Python
 -	Création de l’interface en cours
 
-10h20 : 
- 
+10h20 - 11h15 : Mise en place du mode multijoueur
+    - Mise en place d'un système faisant sorte que 2 pc puissent se connecter en meme temps
+     - Tests de connexion simultanée entre les deux machines
+
