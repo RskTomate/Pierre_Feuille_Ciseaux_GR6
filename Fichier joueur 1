@@ -1,0 +1,148 @@
+
+import socket
+import tkinter as tk
+from tkinter import messagebox
+import threading
+
+PORT = 12345
+emojis = {"pierre": "✊", "feuille": "✋", "ciseaux": "✌️"}
+
+def qui_gagne(c1, c2):
+    if c1 == c2:
+        return "egalite"
+    if (c1 == "pierre"  and c2 == "ciseaux") or \
+       (c1 == "feuille" and c2 == "pierre")  or \
+       (c1 == "ciseaux" and c2 == "feuille"):
+        return "joueur1"
+    return "joueur2"
+
+# ── Variables partagées ──────────────────────────────────────
+choix_serveur = None
+conn = None          
+score_s = 0
+score_c = 0
+
+# ── Interface graphique ──────────────────────────────────────
+fenetre = tk.Tk()
+fenetre.title("PFC Réseau — SERVEUR")
+fenetre.configure(bg="#1e1e2e")
+fenetre.resizable(False, False)
+
+FOND  = "#1e1e2e"
+CARTE = "#2a2a3e"
+BLANC = "#e0e0f0"
+GRIS  = "#888899"
+VERT  = "#4caf74"
+ROUGE = "#e05c5c"
+JAUNE = "#f0c040"
+BLEU  = "#5b8dee"
+
+tk.Label(fenetre, text="✊ ✋ ✌️  SERVEUR", font=("Helvetica", 18, "bold"),
+         bg=FOND, fg=BLANC, pady=14).pack()
+
+label_statut = tk.Label(fenetre, text="⏳ En attente du client...",
+                        font=("Helvetica", 12), bg=FOND, fg=JAUNE)
+label_statut.pack(pady=4)
+
+# Arène
+cadre_arene = tk.Frame(fenetre, bg=CARTE, pady=14, padx=30)
+cadre_arene.pack(padx=24, pady=8, fill="x")
+
+cadre_s = tk.Frame(cadre_arene, bg=CARTE)
+cadre_s.pack(side="left", expand=True)
+tk.Label(cadre_s, text="Vous (serveur)", font=("Helvetica", 10), bg=CARTE, fg=GRIS).pack()
+label_choix_s = tk.Label(cadre_s, text="❓", font=("Helvetica", 46), bg=CARTE, fg=BLANC)
+label_choix_s.pack()
+
+tk.Label(cadre_arene, text="⚡", font=("Helvetica", 26), bg=CARTE, fg=GRIS).pack(side="left", expand=True)
+
+cadre_c = tk.Frame(cadre_arene, bg=CARTE)
+cadre_c.pack(side="left", expand=True)
+tk.Label(cadre_c, text="Client (ami)", font=("Helvetica", 10), bg=CARTE, fg=GRIS).pack()
+label_choix_c = tk.Label(cadre_c, text="❓", font=("Helvetica", 46), bg=CARTE, fg=BLANC)
+label_choix_c.pack()
+
+label_resultat = tk.Label(fenetre, text="—", font=("Helvetica", 14, "bold"),
+                          bg=FOND, fg=GRIS, pady=8)
+label_resultat.pack()
+
+# Boutons de choix
+cadre_btns = tk.Frame(fenetre, bg=FOND)
+cadre_btns.pack(pady=6)
+btns = []
+for c in ["pierre", "feuille", "ciseaux"]:
+    b = tk.Button(cadre_btns, text=f"{emojis[c]}\n{c}",
+                  font=("Helvetica", 13), width=6, height=2,
+                  bg=CARTE, fg=BLANC,
+                  activebackground=BLEU, activeforeground=BLANC,
+                  relief="flat", cursor="hand2", state="disabled",
+                  command=lambda x=c: envoyer_choix(x))
+    b.pack(side="left", padx=8)
+    btns.append(b)
+
+label_score = tk.Label(fenetre, text="Vous : 0   |   Ami : 0",
+                       font=("Helvetica", 12), bg=FOND, fg=BLANC, pady=8)
+label_score.pack()
+
+tk.Button(fenetre, text="Quitter", font=("Helvetica", 10),
+          bg=FOND, fg=GRIS, relief="flat", command=fenetre.destroy).pack(pady=(0, 14))
+
+# ── Logique réseau ───────────────────────────────────────────
+def activer_boutons(actif=True):
+    for b in btns:
+        b.config(state="normal" if actif else "disabled")
+
+def envoyer_choix(choix):
+    global choix_serveur
+    choix_serveur = choix
+    label_choix_s.config(text=emojis[choix])
+    activer_boutons(False)
+    label_statut.config(text="⏳ En attente du choix de l'ami...", fg=JAUNE)
+    threading.Thread(target=recevoir_choix_client, daemon=True).start()
+
+def recevoir_choix_client():
+    global score_s, score_c
+    try:
+        conn.sendall(choix_serveur.encode())
+        choix_client = conn.recv(1024).decode()
+
+        fenetre.after(0, lambda: label_choix_c.config(text=emojis.get(choix_client, "?")))
+
+        resultat = qui_gagne(choix_serveur, choix_client)
+        if resultat == "egalite":
+            msg, couleur = "🤝 Égalité !", JAUNE
+        elif resultat == "joueur1":
+            msg, couleur = "🎉 Vous gagnez !", VERT
+            score_s += 1
+        else:
+            msg, couleur = "😢 L'ami gagne !", ROUGE
+            score_c += 1
+
+        fenetre.after(0, lambda: label_resultat.config(text=msg, fg=couleur))
+        fenetre.after(0, lambda: label_score.config(
+            text=f"Vous : {score_s}   |   Ami : {score_c}"))
+        fenetre.after(0, lambda: label_choix_s.config(text="❓"))
+        fenetre.after(0, lambda: label_choix_c.config(text="❓"))
+        fenetre.after(0, lambda: label_statut.config(
+            text="✅ Connecté — à votre tour !", fg=VERT))
+        fenetre.after(0, lambda: activer_boutons(True))
+    except Exception as e:
+        fenetre.after(0, lambda: label_statut.config(
+            text=f"❌ Erreur : {e}", fg=ROUGE))
+
+def attendre_client():
+    global conn
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    ip_locale = socket.gethostbyname(socket.gethostname())
+    srv.bind(("", PORT))
+    srv.listen(1)
+    fenetre.after(0, lambda: label_statut.config(
+        text=f"🌐 Mon IP : {ip_locale}  — port {PORT}", fg=JAUNE))
+    conn, addr = srv.accept()
+    fenetre.after(0, lambda: label_statut.config(
+        text=f"✅ Connecté à {addr[0]} — à votre tour !", fg=VERT))
+    fenetre.after(0, lambda: activer_boutons(True))
+
+threading.Thread(target=attendre_client, daemon=True).start()
+fenetre.mainloop()
