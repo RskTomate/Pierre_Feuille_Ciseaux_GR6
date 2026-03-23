@@ -115,7 +115,7 @@ def recevoir_choix_client():
             msg, couleur = "🎉 Vous gagnez !", VERT
             score_s += 1
         else:
-            msg, couleur = "😢 L'ami gagne !", ROUGE
+            msg, couleur = "😢 L'adversaire gagne !", ROUGE
             score_c += 1
 
         fenetre.after(0, lambda: label_resultat.config(text=msg, fg=couleur))
