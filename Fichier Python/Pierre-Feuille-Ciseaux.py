@@ -120,8 +120,13 @@ def Temps(cpt =10,b=1.0):
         canvas.itemconfig(t, text=""+str(cpt)+" s")
         seconde = cpt - 1
         app.after(1000, Temps, cpt-1, round(b-0.1, 1))
-    if cpt <= 2:
+    if cpt <= 2 and pick_j1 == True:
         btn_Retour.destroy()
+    if cpt == 0 and pick_j1 == False:
+        croix = ctk.CTkImage(light_image=Image.open("images/Croix_rouge.png"), size=(120, 100))
+        label = ctk.CTkLabel(app, image=croix, text="", fg_color="#0f3460")
+        canvas.create_window(360, 360, anchor="center", window=label)
+        label.ctk_image = croix
         
 # ── Création Fenetre ──────────────────────────────────
 

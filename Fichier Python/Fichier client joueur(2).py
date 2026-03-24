@@ -1,9 +1,8 @@
-
 import socket
 import tkinter as tk
 import threading
 
-IP_SERVEUR = "192.168.56.1"
+IP_SERVEUR = "172.18.80.1"
 PORT = 12345
 
 emojis = {"pierre": "✊", "feuille": "✋", "ciseaux": "✌️"}
