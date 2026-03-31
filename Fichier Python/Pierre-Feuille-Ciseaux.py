@@ -59,11 +59,12 @@ def toggle_pret(numero):
     if numero == 2:
         pret_j2 = not pret_j2
         if pret_j2:
-            btn_Pret_J2.configure(fg_color="green")
+            canvas.itemconfig(btn_Pret_J2_contour, fill="green")
     
     if pret_j1 and pret_j2:
         btn_Pret_J1.destroy()
-        btn_Pret_J2.destroy()
+        canvas.delete(btn_Pret_J2_contour)
+        canvas.delete(btn_Pret_J2)
         canvas.delete(Waiting)
         Lancer_jeu()
 
@@ -85,22 +86,35 @@ def Lancer_jeu():
 
 # ── Choisir Pierre / Feuille / Ciseaux ──────────────────────────────────
 
-def Choix(x):
-    global pick_j1 , chx , btn_Retour
-    if pret_j1 and pret_j2 and not pick_j1:
-        if x == 1:
-            image = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(120, 100))
-        elif x == 2:
-            image = ctk.CTkImage(light_image=Image.open("images/Feuille.png"), size=(120, 100))
-        elif x == 3:
-            image = ctk.CTkImage(light_image=Image.open("images/Ciseaux.png"), size=(120, 100))
+def Choix(x , j):  
+    if j == 1:    
+        global pick_j1 , chx , btn_Retour
+        if pret_j1 and pret_j2 and not pick_j1:
+            if x == 1:
+                imagej1 = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(120, 100))
+            elif x == 2:
+                imagej1 = ctk.CTkImage(light_image=Image.open("images/Feuille.png"), size=(120, 100))
+            elif x == 3:
+                imagej1 = ctk.CTkImage(light_image=Image.open("images/Ciseaux.png"), size=(120, 100))
 
-        label = ctk.CTkLabel(app, image=image, text="", fg_color="#0f3460")
-        chx = canvas.create_window(360, 360, anchor="center", window=label)
-        label.ctk_image = image
-        pick_j1 = True
-        btn_Retour = ctk.CTkButton(app,text="retour",font=("Lemon Milk", 15, "bold"),text_color="black",width=70, height=30, fg_color="red", hover_color="#ff4f4f",corner_radius=0, command=Retour)
-        canvas.create_window(360, 430, anchor="center", window=btn_Retour)
+            labelj1 = ctk.CTkLabel(app, image=imagej1, text="", fg_color="#0f3460")
+            chxj1 = canvas.create_window(360, 360, anchor="center", window=labelj1)
+            labelj1.ctk_image = imagej1
+            pick_j1 = True
+            btn_Retour = ctk.CTkButton(app,text="retour",font=("Lemon Milk", 15, "bold"),text_color="black",width=70, height=30, fg_color="red", hover_color="#ff4f4f",corner_radius=0, command=Retour)
+            canvas.create_window(360, 430, anchor="center", window=btn_Retour)
+    if j == 2:
+        if seconde == 0:
+            if x == 1:
+                imagej2 = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(120, 100))
+            elif x == 2:
+                imagej2 = ctk.CTkImage(light_image=Image.open("images/Feuille.png"), size=(120, 100))
+            elif x == 3:
+                imagej2 = ctk.CTkImage(light_image=Image.open("images/Ciseaux.png"), size=(120, 100))
+            labelj2 = ctk.CTkLabel(app, image=imagej2, text="", fg_color="#0f3460")
+            chxj2 = canvas.create_window(640, 360, anchor="center", window=labelj2)
+            labelj2.ctk_image = imagej2
+
 
 # ── Revenir Sur son choix ──────────────────────────────────
 
@@ -115,6 +129,10 @@ def Retour():
 
 def Temps(cpt =10,b=1.0):
     global seconde
+    image = ctk.CTkImage(light_image=Image.open("images/point_interrogation.png"), size=(120, 100))
+    labelj2 = ctk.CTkLabel(app, image=image, text="", fg_color="#0f3460")
+    chx = canvas.create_window(640, 360, anchor="center", window=labelj2)
+    labelj2.ctk_image = image
     if cpt >= 0:
         barre.set(b)
         canvas.itemconfig(t, text=""+str(cpt)+" s")
@@ -136,7 +154,7 @@ app.title("Pierre Feuille Ciseaux")
 app.geometry("1000x800")
 
 # ── Image de fond avec Canvas ──────────────────────────────────
-Fond = Image.open("images/Arène.png").resize((1000, 800))
+Fond = Image.open("images\Arène.png").resize((1000, 800))
 fond_tk = ImageTk.PhotoImage(Fond)
 
 canvas = tk.Canvas(app, width=1000, height=800, highlightthickness=0, bd=0)
@@ -166,6 +184,10 @@ j2 = canvas.create_text(800, 250, text="Joueur 2", font=("Lemon Milk", 40, "bold
 
 t = canvas.create_text(500, 500, text="10 s", font=("Lemon Milk", 25 , "bold"), fill="black")
 
+btn_Pret_J2_contour = canvas.create_rectangle(725, 439, 875, 491, fill="red", outline="")
+btn_Pret_J2 = canvas.create_text(800, 465,text="Pret",font=("Lemon Milk", 30, "bold"), fill="black")
+
+
 # ── Bouton Pierre ───────────────────────────────────────────────────────────────
 pierre = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(80, 80))
 
@@ -178,7 +200,7 @@ btn_pierre = ctk.CTkButton(
     fg_color="#0f3460",
     hover_color="#1a4a80", 
     corner_radius=0,
-    command=lambda: Choix(1)
+    command=lambda: Choix(1 , 1)
 )
 canvas.create_window(310, 660, anchor="center", window=btn_pierre)
 
@@ -194,7 +216,7 @@ btn_feuille = ctk.CTkButton(
     fg_color="#0f3460",
     hover_color="#1a4a80", 
     corner_radius=0, 
-    command=lambda: Choix(2)
+    command=lambda: Choix(2 , 1)
 )
 canvas.create_window(500, 660, anchor="center", window=btn_feuille)
 
@@ -210,7 +232,7 @@ btn_ciseaux = ctk.CTkButton(
     fg_color="#0f3460",
     hover_color="#1a4a80", 
     corner_radius=0, 
-    command=lambda: Choix(3)
+    command=lambda: Choix(3 , 1)
 )
 canvas.create_window(690, 660, anchor="center", window=btn_ciseaux)
 
@@ -228,21 +250,6 @@ btn_Pret_J1 = ctk.CTkButton(
     command=lambda: toggle_pret(1)
 )
 canvas.create_window(200, 465, anchor="center", window=btn_Pret_J1)
-
-# ── Bouton Pret J2 ────────────────────────────────────────────────────────────────
-btn_Pret_J2 = ctk.CTkButton(
-    app,
-    text="Pret",
-    font=("Lemon Milk", 40, "bold"),
-    text_color="black",
-    width=150, 
-    height=50, 
-    fg_color="red",
-    hover_color="#ff4f4f",
-    corner_radius=0, 
-    command=lambda: toggle_pret(2)
-)
-canvas.create_window(800, 465, anchor="center", window=btn_Pret_J2)
 
 # ── Barre de temps ────────────────────────────────────────────────────────────────
 barre = ctk.CTkProgressBar(
@@ -263,6 +270,7 @@ jpret = 0
 pret_j1 = False
 pret_j2 = False
 pick_j1 = False
+toggle_pret(2)
 Wait()
 
 app.mainloop()
