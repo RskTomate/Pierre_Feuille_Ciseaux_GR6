@@ -17,3 +17,9 @@ SUIVI D’ACTIVITE pierre-feuille-ciseaux
     - Mise en place d'un système faisant sorte que 2 pc puissent se connecter en meme temps
      - Tests de connexion simultanée entre les deux machines
 
+03/04/2026
+Gabriel : finalisation des deux interfaces de connexion + création de l'interface principal et de celle des phtoos de profil
+
+Rafael : Finalisation des differents scénarios concernant le jeu + création de 3 diagrammes de séquences
+
+Thomas : Finalisation du jeu + rajouts de fonctionnalité et changement sur certains designs
