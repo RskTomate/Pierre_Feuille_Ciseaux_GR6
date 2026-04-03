@@ -53,7 +53,7 @@ def texte_contour(canvas, x, y, texte, font, fill, contour="black", epaisseur=2,
 # ── Savoir quand les deux joueurs sont prets ──────────────────────────────────  
 
 def toggle_pret(numero):
-    global pret_j1, pret_j2
+    global pret_j1, pret_j2 , t , barre
     
     if numero == 1:
         pret_j1 = not pret_j1
@@ -70,11 +70,71 @@ def toggle_pret(numero):
         canvas.delete(btn_Pret_J2_contour)
         canvas.delete(btn_Pret_J2)
         canvas.delete(Waiting)
-        image = ctk.CTkImage(light_image=Image.open("images/point_interrogation.png"), size=(120, 100))
-        labelj2 = ctk.CTkLabel(app, image=image, text="", fg_color="#0f3460")
-        canvas.create_window(640, 360, anchor="center", window=labelj2)
         texte_contour(canvas, 500, 360, "VS", ("Lemon Milk", 60, "bold"), "black", tag="score")
         canvas.create_text(500, 360, text="VS", font=("Lemon Milk", 60, "bold"), fill="gold")
+        # ── Bouton Pierre ───────────────────────────────────────────────────────────────
+        pierre = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(80, 80))
+
+        btn_pierre = ctk.CTkButton(
+            app, 
+            image = pierre,
+            text="", 
+            width=120, 
+            height=100, 
+            fg_color="#0f3460",
+            hover_color="#1a4a80", 
+            corner_radius=0,
+            command=lambda: Choix(1 , 1)
+        )
+        canvas.create_window(310, 660, anchor="center", window=btn_pierre)
+
+        # ── Bouton Feuille ───────────────────────────────────────────────────────────────
+        feuille = ctk.CTkImage(light_image=Image.open("images/feuille.png"), size=(80, 80))
+
+        btn_feuille = ctk.CTkButton(
+            app, 
+            image = feuille,
+            text="", 
+            width=120, 
+            height=100, 
+            fg_color="#0f3460",
+            hover_color="#1a4a80", 
+            corner_radius=0, 
+            command=lambda: Choix(2 , 1)
+        )
+        canvas.create_window(500, 660, anchor="center", window=btn_feuille)
+
+        # ── Bouton Ciseaux ────────────────────────────────────────────────────────────────
+        ciseaux = ctk.CTkImage(light_image=Image.open("images/ciseaux.png"), size=(80, 80))
+
+        btn_ciseaux = ctk.CTkButton(
+            app,
+            image = ciseaux, 
+            text="", 
+            width=120, 
+            height=100, 
+            fg_color="#0f3460",
+            hover_color="#1a4a80", 
+            corner_radius=0, 
+            command=lambda: Choix(3 , 1)
+        )
+        canvas.create_window(690, 660, anchor="center", window=btn_ciseaux)
+
+        t = canvas.create_text(500, 500, text="10 s", font=("Lemon Milk", 25 , "bold"), fill="black")
+
+        # ── Barre de temps ────────────────────────────────────────────────────────────────
+        
+        barre = ctk.CTkProgressBar(
+            app, 
+            width=600, 
+            height=10, 
+            progress_color="green",
+            corner_radius=0, 
+            fg_color="red",
+        )
+        barre.set(1.0)
+        canvas.create_window(500, 530, anchor="center", window=barre)
+
         Lancer_jeu()
 
 # ── Attente des deux Participants ──────────────────────────────────  
@@ -96,67 +156,52 @@ def Lancer_jeu():
 
 def Choix(x , j):  
     if j == 1:    
-        global j1_a_pick , chxj1 , chxj2 ,btn_Retour, pick_j1 , imagej1 , imagej2, seconde
-        if pret_j1 and pret_j2 and not j1_a_pick:
+        global j1_a_pick , chxj1 , chxj2 , pick_j1 , imagej1 , imagej2, seconde
+        if pret_j1 and pret_j2 and not lock:
             if x == 1:
-                imagej1 = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(120, 100))
+                imagej1 = Image.open("images/pierre.png").convert("RGBA").resize((120, 100))
                 pick_j1 = 1
             elif x == 2:
-                imagej1 = ctk.CTkImage(light_image=Image.open("images/Feuille.png"), size=(120, 100))
+                imagej1 = Image.open("images/Feuille.png").convert("RGBA").resize((120, 100))
                 pick_j1 = 2
             elif x == 3:
-                imagej1 = ctk.CTkImage(light_image=Image.open("images/Ciseaux.png"), size=(120, 100))
+                imagej1 = Image.open("images/Ciseaux.png").convert("RGBA").resize((120, 100))
                 pick_j1 = 3
 
-            labelj1 = ctk.CTkLabel(app, image=imagej1, text="", fg_color="#0f3460")
-            chxj1 = canvas.create_window(360, 360, anchor="center", window=labelj1)
-            labelj1.ctk_image = imagej1
+            labelj1 = ImageTk.PhotoImage(imagej1)
+            canvas.labelj1 = labelj1
+            chxj1 = canvas.create_image(360, 360, anchor="center", image=labelj1)
             j1_a_pick = True
-            if seconde >= 3:    
-                btn_Retour = ctk.CTkButton(app,text="retour",font=("Lemon Milk", 15, "bold"),text_color="black",width=70, height=30, fg_color="red", hover_color="#ff4f4f",corner_radius=0, command=Retour)
-                canvas.create_window(360, 430, anchor="center", window=btn_Retour)
     if j == 2:
         if x == 1:
-            imagej2 = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(120, 100))
+            imagej2 = Image.open("images/pierre.png").convert("RGBA").resize((120, 100))
         elif x == 2:
-            imagej2 = ctk.CTkImage(light_image=Image.open("images/Feuille.png"), size=(120, 100))
+            imagej2 = Image.open("images/Feuille.png").convert("RGBA").resize((120, 100))
         elif x == 3:
-            imagej2 = ctk.CTkImage(light_image=Image.open("images/Ciseaux.png"), size=(120, 100))
-        labelj2 = ctk.CTkLabel(app, image=imagej2, text="", fg_color="#0f3460")
-        chxj2 = canvas.create_window(640, 360, anchor="center", window=labelj2)
-
-
-# ── Revenir Sur son choix ──────────────────────────────────
-
-def Retour():
-    if seconde >= 2:
-        global j1_a_pick
-        btn_Retour.destroy()
-        j1_a_pick = False
-        canvas.delete(chxj1)
+            imagej2 = Image.open("images/Ciseaux.png").convert("RGBA").resize((120, 100))
+        labelj2 = ImageTk.PhotoImage(imagej2)
+        canvas.labelj2 = labelj2
+        chxj2 = canvas.create_image(640, 360, anchor="center", image=labelj2)
+        canvas.delete(point_interrogation)
 
 # ── Barre de temps ──────────────────────────────────
 
 def Temps(cpt =10,b=1.0):
-    global seconde , j1_a_pick , pick_j2 , pick_j1 , imagej1 , chxj1
+    global seconde , j1_a_pick , pick_j2 , pick_j1 , imagej1 , chxj1 , lock
     if cpt >= 0:
         barre.set(b)
         canvas.itemconfig(t, text=""+str(cpt)+" s")
         seconde = cpt - 1
         app.after(1000, Temps, cpt-1, round(b-0.1, 1))
-    if cpt <= 2 and j1_a_pick:
-        try :
-            btn_Retour.destroy()
-        except:
-            None
     if cpt == 0 and not j1_a_pick:
-        imagej1 = ctk.CTkImage(light_image=Image.open("images/Croix_rouge.png"), size=(120, 100))
-        label = ctk.CTkLabel(app, image=imagej1, text="", fg_color="#0f3460")
-        chxj1 = canvas.create_window(360, 360, anchor="center", window=label)
-        label.ctk_image = imagej1
+        imagej1 = Image.open("images/Croix_rouge.png").convert("RGBA").resize((120, 100))
+        labelj1 = ImageTk.PhotoImage(imagej1)
+        canvas.labelj1 = labelj1
+        chxj1 = canvas.create_image(360, 360, anchor="center", image=labelj1)
         j1_a_pick = True
         pick_j1 = 4
     if cpt == 0 :
+        lock = True
         Choix(pick_j2, 2)
         FinManche()
 
@@ -216,10 +261,15 @@ def MiseAJourScore(j):
         
 # ── init Manche ──────────────────────────────────
 def Init_Manche():
-    global j1_a_pick , pick_j2 , fin_manche , chxj1 , chxj2
+    global j1_a_pick , pick_j2 , fin_manche , chxj1 , chxj2 , point_interrogation , lock
     j1_a_pick = False
     fin_manche = False
+    lock = False
     pick_j2 = randint(1,3)
+    image = Image.open("images/point_interrogation.png").convert("RGBA").resize((120 , 100))
+    labelj2 = ImageTk.PhotoImage(image)
+    canvas.image = labelj2
+    point_interrogation = canvas.create_image(640, 360, anchor="center", image=labelj2)
     try:
         canvas.delete(Résulat)
         canvas.delete(chxj1)
@@ -268,59 +318,9 @@ j1 = canvas.create_text(200, 250, text="Joueur 1", font=("Lemon Milk", 40, "bold
 
 j2 = canvas.create_text(800, 250, text="Joueur 2", font=("Lemon Milk", 40, "bold"), fill="black")
 
-t = canvas.create_text(500, 500, text="10 s", font=("Lemon Milk", 25 , "bold"), fill="black")
-
 btn_Pret_J2_contour = canvas.create_rectangle(725, 439, 875, 491, fill="red", outline="")
 btn_Pret_J2 = canvas.create_text(800, 465,text="Pret",font=("Lemon Milk", 30, "bold"), fill="black")
 
-
-# ── Bouton Pierre ───────────────────────────────────────────────────────────────
-pierre = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(80, 80))
-
-btn_pierre = ctk.CTkButton(
-    app, 
-    image = pierre,
-    text="", 
-    width=120, 
-    height=100, 
-    fg_color="#0f3460",
-    hover_color="#1a4a80", 
-    corner_radius=0,
-    command=lambda: Choix(1 , 1)
-)
-canvas.create_window(310, 660, anchor="center", window=btn_pierre)
-
-# ── Bouton Feuille ───────────────────────────────────────────────────────────────
-feuille = ctk.CTkImage(light_image=Image.open("images/feuille.png"), size=(80, 80))
-
-btn_feuille = ctk.CTkButton(
-    app, 
-    image = feuille,
-    text="", 
-    width=120, 
-    height=100, 
-    fg_color="#0f3460",
-    hover_color="#1a4a80", 
-    corner_radius=0, 
-    command=lambda: Choix(2 , 1)
-)
-canvas.create_window(500, 660, anchor="center", window=btn_feuille)
-
-# ── Bouton Ciseaux ────────────────────────────────────────────────────────────────
-ciseaux = ctk.CTkImage(light_image=Image.open("images/ciseaux.png"), size=(80, 80))
-
-btn_ciseaux = ctk.CTkButton(
-    app,
-    image = ciseaux, 
-    text="", 
-    width=120, 
-    height=100, 
-    fg_color="#0f3460",
-    hover_color="#1a4a80", 
-    corner_radius=0, 
-    command=lambda: Choix(3 , 1)
-)
-canvas.create_window(690, 660, anchor="center", window=btn_ciseaux)
 
 # ── Bouton Pret J1 ────────────────────────────────────────────────────────────────
 btn_Pret_J1 = ctk.CTkButton(
@@ -337,18 +337,6 @@ btn_Pret_J1 = ctk.CTkButton(
 )
 canvas.create_window(200, 465, anchor="center", window=btn_Pret_J1)
 
-# ── Barre de temps ────────────────────────────────────────────────────────────────
-barre = ctk.CTkProgressBar(
-    app, 
-    width=600, 
-    height=10, 
-    progress_color="green",
-    corner_radius=0, 
-    fg_color="red",
-)
-barre.set(1.0)
-canvas.create_window(500, 530, anchor="center", window=barre)
-
 # ── Lancement de la fenêtre ────────────────────────────────────────────────
 
 Init_jeu()
@@ -360,6 +348,3 @@ score_j2 = 0
 toggle_pret(2)
 Wait()
 app.mainloop()
-
-
-
