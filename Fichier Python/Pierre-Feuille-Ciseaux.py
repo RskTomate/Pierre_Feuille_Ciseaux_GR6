@@ -2,6 +2,10 @@
 import customtkinter as ctk
 import tkinter as tk
 from PIL import Image , ImageTk
+from random import randint
+import time
+import subprocess
+import sys
 
 # ── Initialisation du jeu ────────────────────────────────── 
 
@@ -66,6 +70,11 @@ def toggle_pret(numero):
         canvas.delete(btn_Pret_J2_contour)
         canvas.delete(btn_Pret_J2)
         canvas.delete(Waiting)
+        image = ctk.CTkImage(light_image=Image.open("images/point_interrogation.png"), size=(120, 100))
+        labelj2 = ctk.CTkLabel(app, image=image, text="", fg_color="#0f3460")
+        canvas.create_window(640, 360, anchor="center", window=labelj2)
+        texte_contour(canvas, 500, 360, "VS", ("Lemon Milk", 60, "bold"), "black", tag="score")
+        canvas.create_text(500, 360, text="VS", font=("Lemon Milk", 60, "bold"), fill="gold")
         Lancer_jeu()
 
 # ── Attente des deux Participants ──────────────────────────────────  
@@ -80,72 +89,151 @@ def Wait(points=1):
 # ── Lancement du jeu ──────────────────────────────────        
 
 def Lancer_jeu():
-    texte_contour(canvas, 500, 360, "VS", ("Lemon Milk", 60, "bold"), "black", tag="score")
-    canvas.create_text(500, 360, text="VS", font=("Lemon Milk", 60, "bold"), fill="gold")
+    Init_Manche()
     Temps()
 
 # ── Choisir Pierre / Feuille / Ciseaux ──────────────────────────────────
 
 def Choix(x , j):  
     if j == 1:    
-        global pick_j1 , chx , btn_Retour
-        if pret_j1 and pret_j2 and not pick_j1:
+        global j1_a_pick , chxj1 , chxj2 ,btn_Retour, pick_j1 , imagej1 , imagej2, seconde
+        if pret_j1 and pret_j2 and not j1_a_pick:
             if x == 1:
                 imagej1 = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(120, 100))
+                pick_j1 = 1
             elif x == 2:
                 imagej1 = ctk.CTkImage(light_image=Image.open("images/Feuille.png"), size=(120, 100))
+                pick_j1 = 2
             elif x == 3:
                 imagej1 = ctk.CTkImage(light_image=Image.open("images/Ciseaux.png"), size=(120, 100))
+                pick_j1 = 3
 
             labelj1 = ctk.CTkLabel(app, image=imagej1, text="", fg_color="#0f3460")
             chxj1 = canvas.create_window(360, 360, anchor="center", window=labelj1)
             labelj1.ctk_image = imagej1
-            pick_j1 = True
-            btn_Retour = ctk.CTkButton(app,text="retour",font=("Lemon Milk", 15, "bold"),text_color="black",width=70, height=30, fg_color="red", hover_color="#ff4f4f",corner_radius=0, command=Retour)
-            canvas.create_window(360, 430, anchor="center", window=btn_Retour)
+            j1_a_pick = True
+            if seconde >= 3:    
+                btn_Retour = ctk.CTkButton(app,text="retour",font=("Lemon Milk", 15, "bold"),text_color="black",width=70, height=30, fg_color="red", hover_color="#ff4f4f",corner_radius=0, command=Retour)
+                canvas.create_window(360, 430, anchor="center", window=btn_Retour)
     if j == 2:
-        if seconde == 0:
-            if x == 1:
-                imagej2 = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(120, 100))
-            elif x == 2:
-                imagej2 = ctk.CTkImage(light_image=Image.open("images/Feuille.png"), size=(120, 100))
-            elif x == 3:
-                imagej2 = ctk.CTkImage(light_image=Image.open("images/Ciseaux.png"), size=(120, 100))
-            labelj2 = ctk.CTkLabel(app, image=imagej2, text="", fg_color="#0f3460")
-            chxj2 = canvas.create_window(640, 360, anchor="center", window=labelj2)
-            labelj2.ctk_image = imagej2
+        if x == 1:
+            imagej2 = ctk.CTkImage(light_image=Image.open("images/pierre.png"), size=(120, 100))
+        elif x == 2:
+            imagej2 = ctk.CTkImage(light_image=Image.open("images/Feuille.png"), size=(120, 100))
+        elif x == 3:
+            imagej2 = ctk.CTkImage(light_image=Image.open("images/Ciseaux.png"), size=(120, 100))
+        labelj2 = ctk.CTkLabel(app, image=imagej2, text="", fg_color="#0f3460")
+        chxj2 = canvas.create_window(640, 360, anchor="center", window=labelj2)
 
 
 # ── Revenir Sur son choix ──────────────────────────────────
 
 def Retour():
     if seconde >= 2:
-        global pick_j1
+        global j1_a_pick
         btn_Retour.destroy()
-        pick_j1 = False
-        canvas.delete(chx)
+        j1_a_pick = False
+        canvas.delete(chxj1)
 
 # ── Barre de temps ──────────────────────────────────
 
 def Temps(cpt =10,b=1.0):
-    global seconde
-    image = ctk.CTkImage(light_image=Image.open("images/point_interrogation.png"), size=(120, 100))
-    labelj2 = ctk.CTkLabel(app, image=image, text="", fg_color="#0f3460")
-    chx = canvas.create_window(640, 360, anchor="center", window=labelj2)
-    labelj2.ctk_image = image
+    global seconde , j1_a_pick , pick_j2 , pick_j1 , imagej1 , chxj1
     if cpt >= 0:
         barre.set(b)
         canvas.itemconfig(t, text=""+str(cpt)+" s")
         seconde = cpt - 1
         app.after(1000, Temps, cpt-1, round(b-0.1, 1))
-    if cpt <= 2 and pick_j1 == True:
-        btn_Retour.destroy()
-    if cpt == 0 and pick_j1 == False:
-        croix = ctk.CTkImage(light_image=Image.open("images/Croix_rouge.png"), size=(120, 100))
-        label = ctk.CTkLabel(app, image=croix, text="", fg_color="#0f3460")
-        canvas.create_window(360, 360, anchor="center", window=label)
-        label.ctk_image = croix
+    if cpt <= 2 and j1_a_pick:
+        try :
+            btn_Retour.destroy()
+        except:
+            None
+    if cpt == 0 and not j1_a_pick:
+        imagej1 = ctk.CTkImage(light_image=Image.open("images/Croix_rouge.png"), size=(120, 100))
+        label = ctk.CTkLabel(app, image=imagej1, text="", fg_color="#0f3460")
+        chxj1 = canvas.create_window(360, 360, anchor="center", window=label)
+        label.ctk_image = imagej1
+        j1_a_pick = True
+        pick_j1 = 4
+    if cpt == 0 :
+        Choix(pick_j2, 2)
+        FinManche()
+
+# ── Fin de Manche ──────────────────────────────────
+
+def FinManche():
+    global pick_j2 , pick_j1 , score_j1 , score_j2 , fin_manche
+    GagneManche(pick_j1,pick_j2)
+    if score_j1 == 3 or score_j2 == 3 :
+        if score_j1 == 3:
+            canvas.delete(Résulat)
+            canvas.create_text(500, 450, text="Partie Gagne", font=("Lemon Milk", 50, "bold"), fill="green")
+            app.after(3000, FinJeu)
+        if score_j2 == 3:
+            canvas.delete(Résulat)
+            canvas.create_text(500, 450, text="Partie Perdu", font=("Lemon Milk", 50, "bold"), fill="red")
+            app.after(3000, FinJeu)
+    if fin_manche:
+        app.after(3000, Lancer_jeu)
+
+# ── Gagne Manche ──────────────────────────────────
+    
+def GagneManche(j1 , j2):
+    global score_j1 , score_j2 , Résulat , fin_manche
+    if j1 == 4:
+        Résulat = canvas.create_text(500, 450, text="L'adversaire Gagne", font=("Lemon Milk", 30, "bold"), fill="red")
+        MiseAJourScore(2)
+        fin_manche = True
+    if j2 == 4:
+        Résulat = canvas.create_text(500, 450, text="Vous Gagnez", font=("Lemon Milk", 30, "bold"), fill="green")
+        MiseAJourScore(1)
+        fin_manche = True
+    if j1 == 1 and j2 == 3 or j1 == 2 and j2 == 1 or j1 == 3 and j2 == 2:
+        Résulat = canvas.create_text(500, 450, text="Vous Gagnez", font=("Lemon Milk", 30, "bold"), fill="green")
+        MiseAJourScore(1)
+        fin_manche = True
+    if j1 == 3 and j2 == 1 or j1 == 1 and j2 == 2 or j1 == 2 and j2 == 3:
+        Résulat = canvas.create_text(500, 450, text="L'adversaire Gagne", font=("Lemon Milk", 30, "bold"), fill="red")
+        MiseAJourScore(2)
+        fin_manche = True
+    if j1 == 1 and j2 == 1 or j1 == 2 and j2 == 2 or j1 == 3 and j2 == 3:
+        Résulat = canvas.create_text(500, 450, text="égalité", font=("Lemon Milk", 30, "bold"), fill="grey")
+        fin_manche = True
+
+# ── Mise à jour Score ──────────────────────────────────
+
+def MiseAJourScore(j):
+    global score_j1, score_j2 , score
+    if j == 1 :
+        score_j1 += 1
+        canvas.delete(score)
+        score = canvas.create_text(500, 160, text=""+str(score_j1)+" : "+str(score_j2)+"", font=("Lemon Milk", 50, "bold"), fill= "Black")
+    if j == 2 :
+        score_j2 += 1
+        canvas.delete(score)
+        score = canvas.create_text(500, 160, text=""+str(score_j1)+" : "+str(score_j2)+"", font=("Lemon Milk", 50, "bold"), fill= "Black")
         
+# ── init Manche ──────────────────────────────────
+def Init_Manche():
+    global j1_a_pick , pick_j2 , fin_manche , chxj1 , chxj2
+    j1_a_pick = False
+    fin_manche = False
+    pick_j2 = randint(1,3)
+    try:
+        canvas.delete(Résulat)
+        canvas.delete(chxj1)
+        canvas.delete(chxj2)
+    except:
+        None
+
+def FinJeu():
+    app.quit()
+    app.destroy()
+    subprocess.Popen([sys.executable, r"C:\Users\thomas.hervouet\Documents\GitHub\Pierre_Feuille_Ciseaux_GR6\Fichier Python\Pierre-Feuille-Ciseaux"])
+    
+
+
 # ── Création Fenetre ──────────────────────────────────
 
 ctk.set_appearance_mode("light")
@@ -160,7 +248,6 @@ fond_tk = ImageTk.PhotoImage(Fond)
 canvas = tk.Canvas(app, width=1000, height=800, highlightthickness=0, bd=0)
 canvas.place(x=0, y=0)
 canvas.create_image(0, 0, anchor="nw", image=fond_tk)
-canvas.image = fond_tk  # garder la référence
 
 # ── Tous tes labels placés SUR le canvas ──────────────────────
 
@@ -174,7 +261,6 @@ texte_contour(canvas, 750, 80, "Ciseaux", ("Lemon Milk", 50, "bold"), "black", N
 canvas.create_text(750, 80, text="Ciseaux", font=("Lemon Milk", 50, "bold"), fill="lightblue")
 
 score = canvas.create_text(500, 160, text="0 : 0", font=("Lemon Milk", 50, "bold"), fill= "Black")
-texte_contour(canvas, 500, 160, "0 : 0", ("Lemon Milk", 50, "bold"), "lightgrey", tag="score")
 
 Waiting = canvas.create_text(500, 360, text="Waiting...", font=("Lemon Milk", 60, "bold"), fill="white")
 
@@ -269,10 +355,10 @@ Init_jeu()
 jpret = 0
 pret_j1 = False
 pret_j2 = False
-pick_j1 = False
+score_j1 = 0
+score_j2 = 0
 toggle_pret(2)
 Wait()
-
 app.mainloop()
 
 
