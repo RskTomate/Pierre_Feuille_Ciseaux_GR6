@@ -4,9 +4,10 @@ import json
 import hashlib
 import os
 import time
+import random
 
 # ─────────────────────────────────────────────
-#  Stockage des utilisateurs (fichier JSON)
+#  Stockage des utilisateurs
 # ─────────────────────────────────────────────
 USERS_FILE = "users.json"
 
@@ -24,37 +25,157 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 # ─────────────────────────────────────────────
-#  État global du serveur
+#  État global
 # ─────────────────────────────────────────────
-users = load_users()          # { username: hashed_password }
-connected = {}                # { username: conn }
-waiting_player = None         # joueur en attente de partie
-games = {}                    # { game_id: { "players": [p1, p2], "state": ... } }
-lock = threading.Lock()
+users        = load_users()
+connected    = {}          # { username: conn }
+waiting_1v1  = None        # joueur en attente de partie normale
+games        = {}          # { game_id: { ... } }
+tournaments  = {}          # { tournament_id: { ... } }
+waiting_tournament = []    # liste des joueurs en attente de tournoi
+lock         = threading.Lock()
 
 # ─────────────────────────────────────────────
-#  Helpers
+#  Helpers réseau
 # ─────────────────────────────────────────────
 def send(conn, data: dict):
     try:
-        msg = json.dumps(data) + "\n"
-        conn.sendall(msg.encode())
+        conn.sendall((json.dumps(data) + "\n").encode())
     except Exception:
         pass
+
+def send_to(username, data: dict):
+    conn = connected.get(username)
+    if conn:
+        send(conn, data)
 
 def broadcast_game(game_id, data):
     game = games.get(game_id)
     if game:
-        for username in game["players"]:
-            conn = connected.get(username)
-            if conn:
-                send(conn, data)
+        for u in game["players"]:
+            if u != "BOT":
+                send_to(u, data)
 
 # ─────────────────────────────────────────────
-#  Logique des commandes
+#  Logique PFC
+# ─────────────────────────────────────────────
+CHOICES = {1: "Pierre", 2: "Feuille", 3: "Ciseaux"}
+# Retourne 1 si j1 gagne, 2 si j2 gagne, 0 si égalité
+def resolve(c1, c2):
+    if c1 == c2:
+        return 0
+    if (c1 == 1 and c2 == 3) or (c1 == 2 and c2 == 1) or (c1 == 3 and c2 == 2):
+        return 1
+    return 2
+
+# ─────────────────────────────────────────────
+#  Gestion des parties
+# ─────────────────────────────────────────────
+def create_game(p1, p2, tournament_id=None, match_key=None):
+    """Crée une partie entre p1 et p2. p2 peut être 'BOT'."""
+    game_id = f"{p1}_vs_{p2}_{int(time.time() * 1000)}"
+    games[game_id] = {
+        "players":       [p1, p2],
+        "scores":        {p1: 0, p2: 0},
+        "choices":       {},
+        "state":         "in_progress",
+        "tournament_id": tournament_id,
+        "match_key":     match_key,
+    }
+    # Prévenir les joueurs humains
+    for u in [p1, p2]:
+        if u != "BOT":
+            send_to(u, {
+                "type":    "game_start",
+                "game_id": game_id,
+                "players": [p1, p2],
+                "msg":     f"Partie lancée ! {p1} vs {p2}",
+            })
+    # Si bot, jouer immédiatement côté serveur après que le vrai joueur ait choisi
+    return game_id
+
+def process_choices(game_id):
+    """Appelé quand les deux joueurs ont choisi. Résout la manche."""
+    game = games.get(game_id)
+    if not game:
+        return
+    p1, p2 = game["players"]
+    c1 = game["choices"].get(p1, 4)   # 4 = n'a pas joué (timeout)
+    c2 = game["choices"].get(p2, random.randint(1, 3) if p2 == "BOT" else 4)
+
+    result = resolve(c1, c2)
+    if result == 1:
+        game["scores"][p1] += 1
+        winner_round = p1
+    elif result == 2:
+        game["scores"][p2] += 1
+        winner_round = p2
+    else:
+        winner_round = None
+
+    s1, s2 = game["scores"][p1], game["scores"][p2]
+
+    broadcast_game(game_id, {
+        "type":         "round_result",
+        "game_id":      game_id,
+        "choice_p1":    c1,
+        "choice_p2":    c2,
+        "winner_round": winner_round,
+        "scores":       {p1: s1, p2: s2},
+    })
+
+    # Vider les choix pour la prochaine manche
+    game["choices"] = {}
+
+    # Vérifier si la partie est finie (premier à 3)
+    if s1 >= 3 or s2 >= 3:
+        game_winner = p1 if s1 >= 3 else p2
+        game["state"] = "finished"
+        broadcast_game(game_id, {
+            "type":    "game_over",
+            "game_id": game_id,
+            "winner":  game_winner,
+            "scores":  {p1: s1, p2: s2},
+            "msg":     f"{game_winner} remporte la partie !",
+        })
+        # Avancer dans le tournoi si besoin
+        tid = game.get("tournament_id")
+        if tid:
+            tournament_advance(tid, game["match_key"], game_winner)
+        del games[game_id]
+
+def cmd_action(username, game_id, choice):
+    """Le joueur envoie son choix (1/2/3)."""
+    with lock:
+        game = games.get(game_id)
+        if not game or game["state"] != "in_progress":
+            send_to(username, {"type": "error", "msg": "Partie introuvable ou terminée."})
+            return
+        if username not in game["players"]:
+            send_to(username, {"type": "error", "msg": "Tu n'es pas dans cette partie."})
+            return
+        if username in game["choices"]:
+            send_to(username, {"type": "error", "msg": "Tu as déjà joué cette manche."})
+            return
+
+        game["choices"][username] = choice
+        send_to(username, {"type": "info", "msg": "Choix enregistré, attente de l'adversaire…"})
+
+        p1, p2 = game["players"]
+        other = p2 if username == p1 else p1
+
+        # Résoudre si l'adversaire est un BOT ou a déjà joué
+        if other == "BOT" or other in game["choices"]:
+            process_choices(game_id)
+
+# ─────────────────────────────────────────────
+#  Commandes réseau
 # ─────────────────────────────────────────────
 def cmd_register(conn, username, password):
     with lock:
+        if not username or not password:
+            send(conn, {"type": "error", "msg": "Champs vides."})
+            return
         if username in users:
             send(conn, {"type": "error", "msg": "Nom d'utilisateur déjà pris."})
         else:
@@ -63,7 +184,6 @@ def cmd_register(conn, username, password):
             send(conn, {"type": "ok", "msg": f"Compte '{username}' créé avec succès."})
 
 def cmd_login(conn, username, password):
-    global waiting_player
     with lock:
         if username not in users:
             send(conn, {"type": "error", "msg": "Utilisateur introuvable."})
@@ -75,71 +195,115 @@ def cmd_login(conn, username, password):
             send(conn, {"type": "error", "msg": "Déjà connecté depuis un autre client."})
             return None
         connected[username] = conn
-        send(conn, {"type": "ok", "msg": f"Bienvenue, {username} !"})
+        send(conn, {"type": "ok", "msg": f"Bienvenue, {username} !", "username": username})
         return username
 
-def cmd_play(username):
-    global waiting_player
+def cmd_play_bot(username):
+    """Lance une partie immédiate contre le bot."""
     with lock:
-        if waiting_player is None:
-            waiting_player = username
-            conn = connected.get(username)
-            send(conn, {"type": "info", "msg": "En attente d'un adversaire..."})
-        elif waiting_player != username:
-            # Lancer la partie
-            p1 = waiting_player
-            p2 = username
-            waiting_player = None
-            game_id = f"{p1}_vs_{p2}_{int(time.time())}"
-            games[game_id] = {
-                "players": [p1, p2],
-                "state": "in_progress",
-                "turn": p1,
-            }
-            broadcast_game(game_id, {
-                "type": "game_start",
-                "game_id": game_id,
-                "players": [p1, p2],
-                "turn": p1,
-                "msg": f"Partie lancée ! {p1} vs {p2}. C'est au tour de {p1}.",
-            })
-            return game_id
+        game_id = create_game(username, "BOT")
+    return game_id
+
+def cmd_play_1v1(username):
+    """Matchmaking 1v1 contre un autre joueur humain."""
+    global waiting_1v1
+    with lock:
+        if waiting_1v1 is None:
+            waiting_1v1 = username
+            send_to(username, {"type": "info", "msg": "En attente d'un adversaire…"})
+            return None
+        elif waiting_1v1 == username:
+            send_to(username, {"type": "info", "msg": "Tu es déjà en file d'attente."})
+            return None
         else:
-            conn = connected.get(username)
-            send(conn, {"type": "info", "msg": "Tu es déjà en attente d'une partie."})
-    return None
+            p1, p2 = waiting_1v1, username
+            waiting_1v1 = None
+            game_id = create_game(p1, p2)
+            return game_id
 
-def cmd_action(username, game_id, action):
-    """Exemple générique d'action en jeu — à adapter selon ton jeu."""
+def cmd_play_tournament(username):
+    """Inscrit le joueur au prochain tournoi à 4."""
+    global waiting_tournament
     with lock:
-        game = games.get(game_id)
-        if not game:
-            conn = connected.get(username)
-            send(conn, {"type": "error", "msg": "Partie introuvable."})
+        if username in waiting_tournament:
+            send_to(username, {"type": "info", "msg": "Tu es déjà inscrit au tournoi."})
             return
-        if game["state"] != "in_progress":
-            conn = connected.get(username)
-            send(conn, {"type": "error", "msg": "La partie est terminée."})
-            return
-        if game["turn"] != username:
-            conn = connected.get(username)
-            send(conn, {"type": "error", "msg": "Ce n'est pas ton tour."})
-            return
+        waiting_tournament.append(username)
+        nb = len(waiting_tournament)
+        # Informer tous les inscrits
+        for u in waiting_tournament:
+            send_to(u, {"type": "info", "msg": f"Tournoi : {nb}/4 joueurs inscrits…"})
+        if nb == 4:
+            players = list(waiting_tournament)
+            waiting_tournament.clear()
+            _start_tournament(players)
 
-        # ── Ici, implémente ta logique de jeu ──
-        # Exemple : on passe juste le tour à l'adversaire
-        players = game["players"]
-        next_turn = players[1] if players[0] == username else players[0]
-        game["turn"] = next_turn
-
-        broadcast_game(game_id, {
-            "type": "game_update",
-            "game_id": game_id,
-            "action": action,
-            "played_by": username,
-            "turn": next_turn,
-            "msg": f"{username} a joué '{action}'. C'est maintenant le tour de {next_turn}.",
+def _start_tournament(players):
+    """Lance un tournoi à 4 joueurs : 2 demi-finales + 1 finale."""
+    random.shuffle(players)
+    tid = f"tournament_{int(time.time())}"
+    tournaments[tid] = {
+        "players":  players,
+        "matches":  {
+            "semi1": {"players": [players[0], players[1]], "winner": None},
+            "semi2": {"players": [players[2], players[3]], "winner": None},
+            "final": {"players": [],                       "winner": None},
+        },
+        "state": "semi",
+    }
+    for u in players:
+        send_to(u, {
+            "type":    "tournament_start",
+            "players": players,
+            "bracket": {
+                "semi1": [players[0], players[1]],
+                "semi2": [players[2], players[3]],
+            },
+            "msg": f"Tournoi lancé ! {players[0]} vs {players[1]}  |  {players[2]} vs {players[3]}",
         })
+    # Lancer les deux demi-finales
+    with lock:
+        g1 = create_game(players[0], players[1], tournament_id=tid, match_key="semi1")
+        g2 = create_game(players[2], players[3], tournament_id=tid, match_key="semi2")
+        tournaments[tid]["matches"]["semi1"]["game_id"] = g1
+        tournaments[tid]["matches"]["semi2"]["game_id"] = g2
+
+def tournament_advance(tid, match_key, winner):
+    """Appelé à la fin d'un match de tournoi pour faire avancer le bracket."""
+    with lock:
+        t = tournaments.get(tid)
+        if not t:
+            return
+        t["matches"][match_key]["winner"] = winner
+
+        if match_key in ("semi1", "semi2"):
+            # Vérifier si les deux demies sont terminées
+            w1 = t["matches"]["semi1"]["winner"]
+            w2 = t["matches"]["semi2"]["winner"]
+            if w1 and w2:
+                t["state"] = "final"
+                t["matches"]["final"]["players"] = [w1, w2]
+                # Prévenir tout le monde
+                all_players = t["players"]
+                for u in all_players:
+                    send_to(u, {
+                        "type": "tournament_final",
+                        "players": [w1, w2],
+                        "msg": f"Finale ! {w1} vs {w2}",
+                    })
+                gf = create_game(w1, w2, tournament_id=tid, match_key="final")
+                t["matches"]["final"]["game_id"] = gf
+
+        elif match_key == "final":
+            t["state"] = "done"
+            t["matches"]["final"]["winner"] = winner
+            all_players = t["players"]
+            for u in all_players:
+                send_to(u, {
+                    "type":   "tournament_over",
+                    "winner": winner,
+                    "msg":    f"🏆 {winner} remporte le tournoi !",
+                })
 
 def cmd_quit_game(username, game_id):
     with lock:
@@ -148,47 +312,49 @@ def cmd_quit_game(username, game_id):
             return
         game["state"] = "finished"
         broadcast_game(game_id, {
-            "type": "game_over",
+            "type":    "game_over",
             "game_id": game_id,
-            "winner": None,
-            "msg": f"{username} a quitté la partie.",
+            "winner":  None,
+            "msg":     f"{username} a quitté la partie.",
         })
-        del games[game_id]
+        games.pop(game_id, None)
 
 def disconnect(username):
-    global waiting_player
+    global waiting_1v1
     with lock:
         connected.pop(username, None)
-        if waiting_player == username:
-            waiting_player = None
+        if waiting_1v1 == username:
+            waiting_1v1 = None
+        if username in waiting_tournament:
+            waiting_tournament.remove(username)
     print(f"[SERVER] {username} déconnecté.")
 
 # ─────────────────────────────────────────────
-#  Boucle de traitement par client
+#  Boucle par client
 # ─────────────────────────────────────────────
 def handle_client(conn, addr):
     print(f"[SERVER] Connexion de {addr}")
     username = None
     current_game = None
-    buffer = ""
+    buf = ""
 
-    send(conn, {"type": "info", "msg": "Bienvenue ! Commandes : REGISTER, LOGIN, PLAY, ACTION, QUIT"})
+    send(conn, {"type": "info", "msg": "Connecté au serveur PFC."})
 
     try:
         while True:
             data = conn.recv(4096).decode()
             if not data:
                 break
-            buffer += data
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
+            buf += data
+            while "\n" in buf:
+                line, buf = buf.split("\n", 1)
                 line = line.strip()
                 if not line:
                     continue
                 try:
                     msg = json.loads(line)
                 except json.JSONDecodeError:
-                    send(conn, {"type": "error", "msg": "Format JSON invalide."})
+                    send(conn, {"type": "error", "msg": "JSON invalide."})
                     continue
 
                 cmd = msg.get("cmd", "").upper()
@@ -199,19 +365,41 @@ def handle_client(conn, addr):
                 elif cmd == "LOGIN":
                     username = cmd_login(conn, msg.get("username", ""), msg.get("password", ""))
 
-                elif cmd == "PLAY":
+                elif cmd == "PLAY_BOT":
                     if not username:
-                        send(conn, {"type": "error", "msg": "Tu dois être connecté."})
+                        send(conn, {"type": "error", "msg": "Connecte-toi d'abord."})
                     else:
-                        gid = cmd_play(username)
+                        current_game = cmd_play_bot(username)
+
+                elif cmd == "PLAY_1V1":
+                    if not username:
+                        send(conn, {"type": "error", "msg": "Connecte-toi d'abord."})
+                    else:
+                        gid = cmd_play_1v1(username)
                         if gid:
                             current_game = gid
+
+                elif cmd == "PLAY_TOURNAMENT":
+                    if not username:
+                        send(conn, {"type": "error", "msg": "Connecte-toi d'abord."})
+                    else:
+                        cmd_play_tournament(username)
 
                 elif cmd == "ACTION":
                     if not username or not current_game:
                         send(conn, {"type": "error", "msg": "Tu n'es pas en partie."})
                     else:
-                        cmd_action(username, current_game, msg.get("action", ""))
+                        try:
+                            choice = int(msg.get("choice", 0))
+                        except (ValueError, TypeError):
+                            choice = 0
+                        if choice not in (1, 2, 3):
+                            send(conn, {"type": "error", "msg": "Choix invalide (1=Pierre, 2=Feuille, 3=Ciseaux)."})
+                        else:
+                            cmd_action(username, current_game, choice)
+
+                elif cmd == "GAME_OVER_ACK":
+                    current_game = None
 
                 elif cmd == "QUIT":
                     if current_game:
@@ -224,7 +412,7 @@ def handle_client(conn, addr):
                     send(conn, {"type": "error", "msg": f"Commande inconnue : {cmd}"})
 
     except Exception as e:
-        print(f"[SERVER] Erreur avec {addr}: {e}")
+        print(f"[SERVER] Erreur {addr}: {e}")
     finally:
         if username:
             disconnect(username)
@@ -235,13 +423,11 @@ def handle_client(conn, addr):
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
     HOST, PORT = "0.0.0.0", 5000
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind((HOST, PORT))
-    server.listen(10)
-    print(f"[SERVER] Écoute sur {HOST}:{PORT}")
-
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind((HOST, PORT))
+    srv.listen(20)
+    print(f"[SERVER] PFC Server en écoute sur {HOST}:{PORT}")
     while True:
-        conn, addr = server.accept()
-        t = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
-        t.start()
+        conn, addr = srv.accept()
+        threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
