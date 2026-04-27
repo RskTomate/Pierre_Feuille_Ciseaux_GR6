@@ -60,7 +60,7 @@ def broadcast_game(game_id, data):
 #  Logique PFC
 # ─────────────────────────────────────────────
 CHOICES = {1: "Pierre", 2: "Feuille", 3: "Ciseaux"}
-# Retourne 1 si j1 gagne, 2 si j2 gagne, 0 si égalité
+
 def resolve(c1, c2):
     if c1 == c2:
         return 0
@@ -72,27 +72,75 @@ def resolve(c1, c2):
 #  Gestion des parties
 # ─────────────────────────────────────────────
 def create_game(p1, p2, tournament_id=None, match_key=None):
-    """Crée une partie entre p1 et p2. p2 peut être 'BOT'."""
+    """
+    Crée une partie entre p1 et p2. p2 peut être 'BOT'.
+    Pour un vrai 1v1, la partie est en état 'waiting_ready' jusqu'à ce que
+    les deux joueurs aient envoyé READY.
+    """
     game_id = f"{p1}_vs_{p2}_{int(time.time() * 1000)}"
+    is_bot_game = (p2 == "BOT")
+
     games[game_id] = {
         "players":       [p1, p2],
         "scores":        {p1: 0, p2: 0},
         "choices":       {},
-        "state":         "in_progress",
+        "ready":         set(),           # joueurs ayant cliqué Prêt
+        "state":         "in_progress" if is_bot_game else "waiting_ready",
         "tournament_id": tournament_id,
         "match_key":     match_key,
     }
-    # Prévenir les joueurs humains
-    for u in [p1, p2]:
-        if u != "BOT":
+
+    if is_bot_game:
+        # Bot : démarrage immédiat
+        send_to(p1, {
+            "type":    "game_start",
+            "game_id": game_id,
+            "players": [p1, p2],
+            "msg":     f"Partie contre le BOT lancée !",
+        })
+    else:
+        # 1v1 humain : on prévient les deux qu'ils sont matchés,
+        # mais on attend leur READY avant de commencer
+        for u in [p1, p2]:
+            adv = p2 if u == p1 else p1
             send_to(u, {
-                "type":    "game_start",
-                "game_id": game_id,
-                "players": [p1, p2],
-                "msg":     f"Partie lancée ! {p1} vs {p2}",
+                "type":      "opponent_found",
+                "game_id":   game_id,
+                "players":   [p1, p2],
+                "adversaire": adv,
+                "msg":       f"Adversaire trouvé : {adv} ! Cliquez sur Prêt pour commencer.",
             })
-    # Si bot, jouer immédiatement côté serveur après que le vrai joueur ait choisi
+
     return game_id
+
+
+def cmd_ready(username, game_id):
+    """Le joueur signale qu'il est prêt. La manche démarre quand les deux le sont."""
+    with lock:
+        game = games.get(game_id)
+        if not game:
+            send_to(username, {"type": "error", "msg": "Partie introuvable."})
+            return
+        if game["state"] not in ("waiting_ready", "round_ready"):
+            return  # déjà en cours, ignorer
+
+        game["ready"].add(username)
+        p1, p2 = game["players"]
+        other = p2 if username == p1 else p1
+
+        # Informer l'adversaire que ce joueur est prêt
+        send_to(other, {"type": "opponent_ready", "msg": f"{username} est prêt !"})
+
+        if other in game["ready"] or other == "BOT":
+            # Les deux sont prêts → lancer la manche
+            game["ready"] = set()
+            game["state"] = "in_progress"
+            broadcast_game(game_id, {
+                "type":    "round_start",
+                "game_id": game_id,
+                "msg":     "C'est parti ! Faites votre choix.",
+            })
+
 
 def process_choices(game_id):
     """Appelé quand les deux joueurs ont choisi. Résout la manche."""
@@ -100,7 +148,7 @@ def process_choices(game_id):
     if not game:
         return
     p1, p2 = game["players"]
-    c1 = game["choices"].get(p1, 4)   # 4 = n'a pas joué (timeout)
+    c1 = game["choices"].get(p1, 4)
     c2 = game["choices"].get(p2, random.randint(1, 3) if p2 == "BOT" else 4)
 
     result = resolve(c1, c2)
@@ -124,10 +172,8 @@ def process_choices(game_id):
         "scores":       {p1: s1, p2: s2},
     })
 
-    # Vider les choix pour la prochaine manche
     game["choices"] = {}
 
-    # Vérifier si la partie est finie (premier à 3)
     if s1 >= 3 or s2 >= 3:
         game_winner = p1 if s1 >= 3 else p2
         game["state"] = "finished"
@@ -138,18 +184,28 @@ def process_choices(game_id):
             "scores":  {p1: s1, p2: s2},
             "msg":     f"{game_winner} remporte la partie !",
         })
-        # Avancer dans le tournoi si besoin
         tid = game.get("tournament_id")
         if tid:
             tournament_advance(tid, game["match_key"], game_winner)
         del games[game_id]
+    else:
+        # Prochaine manche : attendre que les deux soient à nouveau prêts
+        game["state"] = "round_ready"
+        game["ready"] = set()
+        broadcast_game(game_id, {
+            "type":    "next_round",
+            "game_id": game_id,
+            "scores":  {p1: s1, p2: s2},
+            "msg":     "Manche suivante — cliquez sur Prêt !",
+        })
+
 
 def cmd_action(username, game_id, choice):
     """Le joueur envoie son choix (1/2/3)."""
     with lock:
         game = games.get(game_id)
         if not game or game["state"] != "in_progress":
-            send_to(username, {"type": "error", "msg": "Partie introuvable ou terminée."})
+            send_to(username, {"type": "error", "msg": "Partie introuvable ou non démarrée."})
             return
         if username not in game["players"]:
             send_to(username, {"type": "error", "msg": "Tu n'es pas dans cette partie."})
@@ -164,7 +220,6 @@ def cmd_action(username, game_id, choice):
         p1, p2 = game["players"]
         other = p2 if username == p1 else p1
 
-        # Résoudre si l'adversaire est un BOT ou a déjà joué
         if other == "BOT" or other in game["choices"]:
             process_choices(game_id)
 
@@ -199,13 +254,11 @@ def cmd_login(conn, username, password):
         return username
 
 def cmd_play_bot(username):
-    """Lance une partie immédiate contre le bot."""
     with lock:
         game_id = create_game(username, "BOT")
     return game_id
 
 def cmd_play_1v1(username):
-    """Matchmaking 1v1 contre un autre joueur humain."""
     global waiting_1v1
     with lock:
         if waiting_1v1 is None:
@@ -222,7 +275,6 @@ def cmd_play_1v1(username):
             return game_id
 
 def cmd_play_tournament(username):
-    """Inscrit le joueur au prochain tournoi à 4."""
     global waiting_tournament
     with lock:
         if username in waiting_tournament:
@@ -230,7 +282,6 @@ def cmd_play_tournament(username):
             return
         waiting_tournament.append(username)
         nb = len(waiting_tournament)
-        # Informer tous les inscrits
         for u in waiting_tournament:
             send_to(u, {"type": "info", "msg": f"Tournoi : {nb}/4 joueurs inscrits…"})
         if nb == 4:
@@ -239,7 +290,6 @@ def cmd_play_tournament(username):
             _start_tournament(players)
 
 def _start_tournament(players):
-    """Lance un tournoi à 4 joueurs : 2 demi-finales + 1 finale."""
     random.shuffle(players)
     tid = f"tournament_{int(time.time())}"
     tournaments[tid] = {
@@ -261,7 +311,6 @@ def _start_tournament(players):
             },
             "msg": f"Tournoi lancé ! {players[0]} vs {players[1]}  |  {players[2]} vs {players[3]}",
         })
-    # Lancer les deux demi-finales
     with lock:
         g1 = create_game(players[0], players[1], tournament_id=tid, match_key="semi1")
         g2 = create_game(players[2], players[3], tournament_id=tid, match_key="semi2")
@@ -269,21 +318,17 @@ def _start_tournament(players):
         tournaments[tid]["matches"]["semi2"]["game_id"] = g2
 
 def tournament_advance(tid, match_key, winner):
-    """Appelé à la fin d'un match de tournoi pour faire avancer le bracket."""
     with lock:
         t = tournaments.get(tid)
         if not t:
             return
         t["matches"][match_key]["winner"] = winner
-
         if match_key in ("semi1", "semi2"):
-            # Vérifier si les deux demies sont terminées
             w1 = t["matches"]["semi1"]["winner"]
             w2 = t["matches"]["semi2"]["winner"]
             if w1 and w2:
                 t["state"] = "final"
                 t["matches"]["final"]["players"] = [w1, w2]
-                # Prévenir tout le monde
                 all_players = t["players"]
                 for u in all_players:
                     send_to(u, {
@@ -293,7 +338,6 @@ def tournament_advance(tid, match_key, winner):
                     })
                 gf = create_game(w1, w2, tournament_id=tid, match_key="final")
                 t["matches"]["final"]["game_id"] = gf
-
         elif match_key == "final":
             t["state"] = "done"
             t["matches"]["final"]["winner"] = winner
@@ -384,6 +428,15 @@ def handle_client(conn, addr):
                         send(conn, {"type": "error", "msg": "Connecte-toi d'abord."})
                     else:
                         cmd_play_tournament(username)
+
+                elif cmd == "READY":
+                    if not username or not current_game:
+                        send(conn, {"type": "error", "msg": "Tu n'es pas en partie."})
+                    else:
+                        # Mettre à jour current_game si besoin (reçu via opponent_found)
+                        gid = msg.get("game_id", current_game)
+                        current_game = gid
+                        cmd_ready(username, current_game)
 
                 elif cmd == "ACTION":
                     if not username or not current_game:
