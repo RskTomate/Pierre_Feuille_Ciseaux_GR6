@@ -86,10 +86,12 @@ def lancer(client, username, mode="bot"):
         btn_Pret_J1=None,
         # ── état réseau 1v1 ──────────────────────────────────
         game_id=None,           # ID de la partie renvoyé par le serveur
-        adversaire_nom=None,    # pseudo de l'adversaire (renseigné au game_start)
-        en_attente=True,        # True tant que le serveur n'a pas envoyé game_start
+        adversaire_nom=None,    # pseudo de l'adversaire
+        en_attente=True,        # True tant qu'on n'a pas reçu opponent_found
+        adv_est_pret=False,     # True quand l'adversaire a confirmé READY
         waiting_item=None,      # item canvas "Recherche adversaire…"
-        nom_j2_item=None,       # item canvas du nom de l'adversaire (mis à jour)
+        status_item=None,       # item canvas statut (attente prêt adversaire)
+        nom_j2_item=None,       # item canvas du nom de l'adversaire
     )
 
     # ── mode bot : J2 est le serveur, pas besoin d'attendre ───────────────
@@ -157,6 +159,7 @@ def lancer(client, username, mode="bot"):
                                       font=("Lemon Milk", 30, "bold"), fill="black")
 
     # ── Bouton Prêt J1 (via canvas.create_window) ─────────────────
+    # En mode 1v1, ce bouton est masqué jusqu'à ce qu'un adversaire soit trouvé.
     s["btn_Pret_J1"] = ctk.CTkButton(
         app, text="Pret",
         font=("Lemon Milk", 40, "bold"), text_color="black",
@@ -165,7 +168,14 @@ def lancer(client, username, mode="bot"):
         corner_radius=0,
         command=lambda: toggle_pret(1)
     )
-    canvas.create_window(200, 465, anchor="center", window=s["btn_Pret_J1"])
+    s["win_btn_j1"] = canvas.create_window(200, 465, anchor="center", window=s["btn_Pret_J1"])
+
+    # En mode 1v1 : bouton Prêt masqué jusqu'à opponent_found
+    if not is_bot:
+        s["btn_Pret_J1"].place_forget()
+        canvas.itemconfig(s["win_btn_j1"], state="hidden")
+        canvas.itemconfig(btn_J2_rect, state="hidden")
+        canvas.itemconfig(btn_J2_txt, state="hidden")
 
     # ── Callback réseau ───────────────────────────────────────────
 
@@ -173,16 +183,22 @@ def lancer(client, username, mode="bot"):
         """Reçu depuis le thread réseau — utiliser app.after() pour l'UI."""
         t = msg.get("type", "")
 
-        if t == "game_start":
-            # La partie est prête : on connaît l'adversaire
-            players = msg.get("players", [])
-            adv = next((p for p in players if p != username), "?")
-            app.after(0, lambda: _on_game_start(msg["game_id"], adv))
+        if t == "opponent_found":
+            # Un adversaire a été trouvé ; on enregistre game_id et on affiche le bouton Prêt
+            game_id = msg.get("game_id")
+            opponent = msg.get("opponent", "?")
+            players  = msg.get("players", [])
+            app.after(0, lambda: _on_opponent_found(game_id, opponent, players))
+
+        elif t == "opponent_ready":
+            # L'adversaire a cliqué Prêt
+            app.after(0, _on_opponent_ready)
+
+        elif t == "game_start":
+            # Les deux joueurs sont prêts : la partie démarre vraiment
+            app.after(0, lambda: _on_game_start(msg["game_id"], msg.get("players", [])))
 
         elif t == "round_result":
-            c2 = msg.get("choice_p2") if msg.get("players", [None])[0] == username else msg.get("choice_p1")
-            # Plus robuste : on cherche le choix de l'adversaire
-            players = msg.get("scores", {})  # scores est un dict {pseudo: score}
             app.after(0, lambda: _on_round_result(msg))
 
         elif t == "game_over":
@@ -191,36 +207,68 @@ def lancer(client, username, mode="bot"):
         elif t == "info":
             pass  # messages informatifs (en attente…)
 
-    def _on_game_start(game_id, adv_nom):
-        s["game_id"] = game_id
-        s["adversaire_nom"] = adv_nom
-        s["en_attente"] = False
+    def _on_opponent_found(game_id, opponent, players):
+        """Adversaire trouvé : afficher son nom et le bouton Prêt."""
+        s["game_id"]       = game_id
+        s["adversaire_nom"] = opponent
+        s["en_attente"]    = False
 
-        # Mettre à jour le nom de l'adversaire à l'écran
+        # Informer le serveur de notre game_id (pour J1 qui était en file)
+        client.set_game(game_id)
+
+        # Mettre à jour le nom J2
         canvas.delete(s["nom_j2_item"])
-        s["nom_j2_item"] = texte_contour(800, 250, adv_nom, ("Lemon Milk", 30, "bold"), "blue")
+        s["nom_j2_item"] = texte_contour(800, 250, opponent, ("Lemon Milk", 30, "bold"), "blue")
 
         # Supprimer le texte "Recherche…"
         if s["waiting_item"]:
             canvas.delete(s["waiting_item"])
             s["waiting_item"] = None
 
-        # L'adversaire est prêt (côté serveur la partie est lancée)
-        toggle_pret(2)
+        # Afficher le statut
+        s["status_item"] = canvas.create_text(
+            500, 360,
+            text="Adversaire trouvé !\nCliquez sur Prêt quand vous êtes prêt.",
+            font=("Lemon Milk", 22, "bold"), fill="yellow",
+            justify="center"
+        )
+
+        # Afficher les boutons Prêt
+        canvas.itemconfig(s["win_btn_j1"], state="normal")
+        canvas.itemconfig(btn_J2_rect, state="hidden")  # pas de bouton J2 en 1v1
+        canvas.itemconfig(btn_J2_txt,  state="hidden")
+
+    def _on_opponent_ready(msg=None):
+        """L'adversaire a cliqué Prêt."""
+        s["adv_est_pret"] = True
+        if s["status_item"]:
+            canvas.itemconfig(s["status_item"], text="L'adversaire est prêt !\nCliquez sur Prêt quand vous êtes prêt.")
+
+    def _on_game_start(game_id, players):
+        """Les deux joueurs sont prêts : lancer le jeu."""
+        s["game_id"] = game_id
+
+        # Supprimer le texte de statut
+        if s["status_item"]:
+            canvas.delete(s["status_item"])
+            s["status_item"] = None
+
+        # J2 (adversaire) est considéré prêt côté UI aussi
+        # (toggle_pret(2) déclenche la logique de démarrage)
+        if not s["pret_j2"]:
+            toggle_pret(2)
 
     def _on_round_result(msg):
         """Le serveur nous donne les deux choix et les scores."""
         if s["fin_manche"]:
-            return  # déjà traité localement (mode bot), ignorer
+            return
 
-        players_list  = list(msg.get("scores", {}).keys())
-        # Identifier quel indice est J1 (nous) et J2
+        players_list = list(msg.get("scores", {}).keys())
         if len(players_list) >= 2:
             p1_srv = players_list[0]
             is_j1  = (p1_srv == username)
             c1_srv = msg.get("choice_p1", 4)
             c2_srv = msg.get("choice_p2", 4)
-            c_nous   = c1_srv if is_j1 else c2_srv
             c_advers = c2_srv if is_j1 else c1_srv
             sc_nous  = msg["scores"].get(username, 0)
             sc_adv   = msg["scores"].get(s["adversaire_nom"], 0)
@@ -250,7 +298,6 @@ def lancer(client, username, mode="bot"):
 
             s["fin_manche"] = True
 
-            # Nouvelle manche ou fin ?
             if sc_nous >= 3 or sc_adv >= 3:
                 pass  # game_over va arriver
             else:
@@ -281,20 +328,30 @@ def lancer(client, username, mode="bot"):
     else:
         client.play_1v1()
 
-    # ── Logique locale (identique à l'original pour le mode bot) ──
+    # ── Logique locale ────────────────────────────────────────────
 
     def toggle_pret(numero):
         if numero == 1:
-            s["pret_j1"] = not s["pret_j1"]
             if s["pret_j1"]:
-                s["btn_Pret_J1"].configure(fg_color="green")
+                return  # déjà prêt, on ne bascule plus
+            s["pret_j1"] = True
+            s["btn_Pret_J1"].configure(fg_color="green")
+
+            # En mode réseau : envoyer READY au serveur
+            if not is_bot and s["game_id"]:
+                client.ready()
+
         if numero == 2:
-            s["pret_j2"] = not s["pret_j2"]
             if s["pret_j2"]:
+                return
+            s["pret_j2"] = True
+            if is_bot:
                 canvas.itemconfig(btn_J2_rect, fill="green")
 
         if s["pret_j1"] and s["pret_j2"]:
-            s["btn_Pret_J1"].destroy()
+            # Détruire les boutons Prêt
+            if s["btn_Pret_J1"]:
+                s["btn_Pret_J1"].destroy()
             canvas.delete(btn_J2_rect)
             canvas.delete(btn_J2_txt)
 
@@ -354,7 +411,7 @@ def lancer(client, username, mode="bot"):
 
     def _afficher_choix_j2(x):
         if x == 4:
-            return  # pas de choix
+            return
         noms = {1: "images/pierre.png", 2: "images/Feuille.png", 3: "images/Ciseaux.png"}
         img = Image.open(noms[x]).convert("RGBA").resize((120, 100))
         tk_img = ImageTk.PhotoImage(img)
@@ -380,9 +437,6 @@ def lancer(client, username, mode="bot"):
             s["chxj1"] = canvas.create_image(360, 360, anchor="center", image=tk_img)
             s["j1_a_pick"] = True
             s["pick_j1"] = 4
-            # Informer le serveur qu'on n'a pas joué (timeout)
-            if not is_bot and s["game_id"]:
-                client.action(4)  # le serveur traitera 4 comme un timeout
         if cpt == 0:
             s["lock"] = True
             _afficher_choix_j2(s["pick_j2"])
@@ -392,7 +446,7 @@ def lancer(client, username, mode="bot"):
     def Temps_reseau(cpt=10, b=1.0):
         """Décompte affiché, mais la résolution vient du serveur."""
         if s["fin_manche"]:
-            return  # le serveur a déjà résolu, on arrête le timer
+            return
 
         if cpt >= 0:
             if s["barre"]:
@@ -402,7 +456,6 @@ def lancer(client, username, mode="bot"):
             app.after(1000, Temps_reseau, cpt-1, round(b-0.1, 1))
 
         if cpt == 0 and not s["j1_a_pick"]:
-            # Timeout : afficher croix et envoyer "pas de choix" au serveur
             try:
                 img = Image.open("images/Croix_rouge.png").convert("RGBA").resize((120, 100))
                 tk_img = ImageTk.PhotoImage(img)
@@ -414,7 +467,6 @@ def lancer(client, username, mode="bot"):
                 pass
             s["j1_a_pick"] = True
             s["pick_j1"] = 4
-            # Le serveur résoudra quand l'adversaire jouera (ou timeout côté serveur)
 
         if cpt == 0:
             s["lock"] = True
@@ -424,7 +476,7 @@ def lancer(client, username, mode="bot"):
         s["j1_a_pick"] = False
         s["fin_manche"] = False
         s["lock"] = False
-        s["pick_j2"] = randint(1, 3) if is_bot else 0  # en réseau, on attend le serveur
+        s["pick_j2"] = randint(1, 3) if is_bot else 0
         img = Image.open("images/point_interrogation.png").convert("RGBA").resize((120, 100))
         tk_img = ImageTk.PhotoImage(img)
         canvas.j2_pi = tk_img
@@ -498,7 +550,7 @@ def lancer(client, username, mode="bot"):
         # Mode bot : J2 prêt immédiatement, J1 clique sur "Pret"
         toggle_pret(2)
     else:
-        # Mode réseau : on attend game_start du serveur avant toggle_pret(2)
+        # Mode réseau : on attend opponent_found du serveur
         Wait()
 
     app.mainloop()

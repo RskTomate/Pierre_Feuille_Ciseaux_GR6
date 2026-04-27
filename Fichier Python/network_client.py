@@ -60,6 +60,14 @@ class GameClient:
     def play(self):
         self.play_bot()
 
+    def set_game(self, game_id: str):
+        """Informe le serveur du game_id reçu via opponent_found (pour J1 en file d'attente)."""
+        self.send({"cmd": "SET_GAME", "game_id": game_id})
+
+    def ready(self):
+        """Signale au serveur que le joueur est prêt à commencer la partie."""
+        self.send({"cmd": "READY"})
+
     def action(self, choice: int):
         """Envoie le choix du joueur : 1=Pierre, 2=Feuille, 3=Ciseaux."""
         self.send({"cmd": "ACTION", "choice": choice})
