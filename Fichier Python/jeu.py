@@ -7,6 +7,8 @@ import customtkinter as ctk
 import tkinter as tk
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 from random import randint
+import base64
+import io
 import os
 
 PDP_PATH  = "images/profil/photo_de_profil.png"
@@ -185,11 +187,11 @@ def lancer(client, username, mode="bot"):
         t = msg.get("type", "")
 
         if t == "opponent_found":
-            # Un adversaire a été trouvé ; on enregistre game_id et on affiche le bouton Prêt
-            game_id = msg.get("game_id")
-            opponent = msg.get("opponent", "?")
-            players  = msg.get("players", [])
-            app.after(0, lambda: _on_opponent_found(game_id, opponent, players))
+            game_id     = msg.get("game_id")
+            opponent    = msg.get("opponent", "?")
+            players     = msg.get("players", [])
+            adv_picture = msg.get("adv_picture", "")
+            app.after(0, lambda: _on_opponent_found(game_id, opponent, players, adv_picture))
 
         elif t == "opponent_ready":
             # L'adversaire a cliqué Prêt
@@ -208,8 +210,8 @@ def lancer(client, username, mode="bot"):
         elif t == "info":
             pass  # messages informatifs (en attente…)
 
-    def _on_opponent_found(game_id, opponent, players):
-        """Adversaire trouvé : afficher son nom et le bouton Prêt."""
+    def _on_opponent_found(game_id, opponent, players, adv_picture=""):
+        """Adversaire trouvé : afficher son nom, sa photo et le bouton Prêt."""
         s["game_id"]       = game_id
         s["adversaire_nom"] = opponent
         s["en_attente"]    = False
@@ -227,12 +229,19 @@ def lancer(client, username, mode="bot"):
         s["nom_j2_item"] = texte_contour(800, 250, opponent, ("Lemon Milk", 30, "bold"), "blue", tag="nom_j2")
 
         # Mettre à jour la photo de profil de l'adversaire
-        pdp_adv_pil = _charger_pdp_adversaire(150)
+        if adv_picture:
+            try:
+                img_bytes = base64.b64decode(adv_picture)
+                pdp_adv_pil = _photo_carree(Image.open(io.BytesIO(img_bytes)).convert("RGBA"), 150)
+            except Exception:
+                pdp_adv_pil = _charger_pdp_adversaire(150)
+        else:
+            pdp_adv_pil = _charger_pdp_adversaire(150)
         pdp_adv_ctk = ctk.CTkImage(light_image=pdp_adv_pil, size=(150, 150))
         s["pdp_j2_ref"] = pdp_adv_ctk   # garder en vie (anti garbage-collector)
         lbl_j2.configure(image=pdp_adv_ctk)
         lbl_j2.ctk_image = pdp_adv_ctk
-        app.update_idletasks()           # forcer le rafraîchissement du widget
+        app.update_idletasks()
 
         # Afficher le statut
         s["status_item"] = canvas.create_text(
@@ -466,10 +475,12 @@ def lancer(client, username, mode="bot"):
             # Continuer le décompte
             app.after(1000, Temps_reseau, cpt - 1, round(b - 0.1, 1))
         else:
-            # Temps écoulé : si J1 n'a pas joué, afficher croix et envoyer un choix auto
+            # Temps écoulé : si J1 n'a pas joué, choisir aléatoirement et afficher ce choix
             if not s["j1_a_pick"]:
+                choix_auto = randint(1, 3)
+                noms_auto = {1: "images/pierre.png", 2: "images/Feuille.png", 3: "images/Ciseaux.png"}
                 try:
-                    img = Image.open("images/Croix_rouge.png").convert("RGBA").resize((120, 100))
+                    img = Image.open(noms_auto[choix_auto]).convert("RGBA").resize((120, 100))
                     tk_img = ImageTk.PhotoImage(img)
                     canvas.j1_img = tk_img
                     if s["chxj1"]:
@@ -478,10 +489,9 @@ def lancer(client, username, mode="bot"):
                 except Exception:
                     pass
                 s["j1_a_pick"] = True
-                s["pick_j1"] = 4
-                # Envoyer un choix aléatoire valide (1/2/3) pour débloquer le serveur
+                s["pick_j1"] = choix_auto
+                # Envoyer ce choix au serveur pour débloquer la manche
                 if not is_bot and s["game_id"]:
-                    choix_auto = randint(1, 3)
                     client.action(choix_auto)
             s["lock"] = True
             # La résolution arrive via _on_round_result — on attend sans bloquer

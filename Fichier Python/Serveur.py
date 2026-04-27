@@ -29,6 +29,7 @@ def hash_password(password):
 # ─────────────────────────────────────────────
 users        = load_users()
 connected    = {}          # { username: conn }
+pictures     = {}          # { username: base64_string }
 waiting_1v1  = None        # joueur en attente de partie normale
 games        = {}          # { game_id: { ... } }
 tournaments  = {}          # { tournament_id: { ... } }
@@ -104,11 +105,12 @@ def create_game(p1, p2, tournament_id=None, match_key=None):
         # mais on attend leurs READY avant d'envoyer game_start
         for u, adv in [(p1, p2), (p2, p1)]:
             send_to(u, {
-                "type":      "opponent_found",
-                "game_id":   game_id,
-                "opponent":  adv,
-                "players":   [p1, p2],
-                "msg":       f"Adversaire trouvé : {adv} ! Cliquez sur Prêt pour commencer.",
+                "type":        "opponent_found",
+                "game_id":     game_id,
+                "opponent":    adv,
+                "players":     [p1, p2],
+                "adv_picture": pictures.get(adv, ""),
+                "msg":         f"Adversaire trouvé : {adv} ! Cliquez sur Prêt pour commencer.",
             })
 
     return game_id
@@ -442,6 +444,10 @@ def handle_client(conn, addr):
                         send(conn, {"type": "error", "msg": "Connecte-toi d'abord."})
                     else:
                         cmd_play_tournament(username)
+
+                elif cmd == "SET_PICTURE":
+                    if username:
+                        pictures[username] = msg.get("picture", "")
 
                 elif cmd == "SET_GAME":
                     # Le client nous informe du game_id qu'il a reçu via opponent_found

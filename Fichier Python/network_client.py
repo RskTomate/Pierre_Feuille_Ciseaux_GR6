@@ -5,6 +5,10 @@ Gère la connexion TCP au serveur et l'envoi/réception de messages JSON.
 import socket
 import json
 import threading
+import base64
+import os
+
+PDP_PATH = "images/profil/photo_de_profil.png"
 
 
 class GameClient:
@@ -46,6 +50,15 @@ class GameClient:
 
     def login(self, username: str, password: str):
         self.send({"cmd": "LOGIN", "username": username, "password": password})
+
+    def send_profile_picture(self):
+        """Envoie la photo de profil en base64 au serveur (après login réussi)."""
+        if os.path.exists(PDP_PATH):
+            with open(PDP_PATH, "rb") as f:
+                data_b64 = base64.b64encode(f.read()).decode()
+        else:
+            data_b64 = ""
+        self.send({"cmd": "SET_PICTURE", "picture": data_b64})
 
     def play_bot(self):
         self.send({"cmd": "PLAY_BOT"})
