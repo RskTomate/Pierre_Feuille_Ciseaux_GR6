@@ -1,54 +1,139 @@
+"""
+interface_photo_de_profil.py — Sélection et recadrage de la photo de profil.
+Sauvegarde dans images/profil/photo_de_profil.png (carré 256×256).
+"""
+import os
 import customtkinter as ctk
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
+from tkinter import filedialog
 
-# ── Paramètres de la fenêtre ───────────────────────────────────────────────
+PDP_SAVE_PATH = "images/profil/photo_de_profil.png"
+os.makedirs("images/profil", exist_ok=True)
+
 ctk.set_appearance_mode("light")
 app = ctk.CTk()
-app.title("Pierre Feuille Ciseaux")
-app.geometry("400x500")
+app.title("Pierre Feuille Ciseaux — Photo de profil")
+app.geometry("400x560")
 app.configure(fg_color="#7B8B8E")
+app.resizable(False, False)
 
 PARCHEMIN   = "#D4B13B"
 BRUN_BOIS   = "#000000"
 OR          = "#648195"
-TEXTE_FONCE = "#2C1A0E"
+BLANC       = "#FFFFFF"
+ROUGE       = "#8B1A1A"
+VERT        = "#2A6B3A"
 
-# ── Image de fond ──────────────────────────────────────────────────────────
-base_img = Image.open("images/image_de_base.png").resize((1000, 2000), Image.LANCZOS)
-draw = ImageDraw.Draw(base_img)
-
+# ── Fond ──────────────────────────────────────────────────────────────────
 try:
-    font_titre = ImageFont.truetype("arial.ttf", 48)
-    font_label = ImageFont.truetype("arial.ttf", 30)
-except:
-    font_titre = ImageFont.load_default()
-    font_label = font_titre
+    base_img = Image.open("images/image_de_base.png").resize((400, 560), Image.LANCZOS)
+    bg_image = ctk.CTkImage(light_image=base_img, size=(400, 560))
+    ctk.CTkLabel(app, image=bg_image, text="").place(x=0, y=0, relwidth=1, relheight=1)
+except Exception:
+    pass
 
+# ── Titre ─────────────────────────────────────────────────────────────────
+ctk.CTkLabel(app, text="Photo de profil",
+             font=("Arial", 26, "bold"),
+             text_color=PARCHEMIN, fg_color="transparent").place(x=0, y=20, relwidth=1)
 
-bg_image = ctk.CTkImage(light_image=base_img, size=(500, 500))
-bg_label = ctk.CTkLabel(app, image=bg_image, text="")
-bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+# ── Prévisualisation ──────────────────────────────────────────────────────
+PREVIEW_SIZE = 160
 
-icone = ctk.CTkImage(light_image=Image.open("images/bot.png"), size=(50, 50))
+def _image_carree(img_pil, size):
+    """Recadre en carré centré."""
+    w, h = img_pil.size
+    m = min(w, h)
+    img_pil = img_pil.crop(((w-m)//2, (h-m)//2, (w+m)//2, (h+m)//2))
+    return img_pil.resize((size, size), Image.LANCZOS).convert("RGBA")
+
+def _placeholder():
+    img = Image.new("RGBA", (PREVIEW_SIZE, PREVIEW_SIZE), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse([2, 2, PREVIEW_SIZE-2, PREVIEW_SIZE-2],
+              fill="#4A6A8A", outline=PARCHEMIN, width=3)
+    try:
+        from PIL import ImageFont
+        fnt = ImageFont.truetype("arial.ttf", 36)
+    except Exception:
+        from PIL import ImageFont
+        fnt = ImageFont.load_default()
+    d.text((PREVIEW_SIZE//2 - 8, PREVIEW_SIZE//2 - 18), "?", font=fnt, fill=BLANC)
+    return img
+
+_preview_pil = None
+
+# Charger photo existante si disponible
+if os.path.exists(PDP_SAVE_PATH):
+    _preview_pil = _image_carree(Image.open(PDP_SAVE_PATH), PREVIEW_SIZE)
+else:
+    _preview_pil = _placeholder()
+
+_preview_ctk = ctk.CTkImage(light_image=_preview_pil, size=(PREVIEW_SIZE, PREVIEW_SIZE))
+lbl_preview = ctk.CTkLabel(app, image=_preview_ctk, text="")
+lbl_preview.place(x=(400 - PREVIEW_SIZE)//2, y=80)
+
+lbl_statut = ctk.CTkLabel(app, text="", font=("Arial", 12, "bold"),
+                           fg_color="transparent", text_color=ROUGE)
+lbl_statut.place(x=0, y=255, relwidth=1)
+
+# ── Logique ───────────────────────────────────────────────────────────────
+
+def choisir_image():
+    global _preview_pil, _preview_ctk
+    path = filedialog.askopenfilename(
+        title="Choisir une image",
+        filetypes=[
+            ("Images", "*.png *.jpg *.jpeg *.bmp *.gif *.webp"),
+            ("Tous les fichiers", "*.*"),
+        ]
+    )
+    if not path:
+        return
+    try:
+        img = Image.open(path)
+        _preview_pil = _image_carree(img, PREVIEW_SIZE)
+        _preview_ctk = ctk.CTkImage(light_image=_preview_pil, size=(PREVIEW_SIZE, PREVIEW_SIZE))
+        lbl_preview.configure(image=_preview_ctk)
+        lbl_preview.ctk_image = _preview_ctk
+        lbl_statut.configure(text="Image chargée — cliquez sur Enregistrer", text_color=OR)
+    except Exception as e:
+        lbl_statut.configure(text=f"✗ Erreur : {e}", text_color=ROUGE)
+
+def enregistrer():
+    global _preview_pil
+    if _preview_pil is None:
+        lbl_statut.configure(text="✗ Aucune image sélectionnée.", text_color=ROUGE)
+        return
+    try:
+        save_img = _preview_pil.resize((256, 256), Image.LANCZOS)
+        save_img.save(PDP_SAVE_PATH, "PNG")
+        lbl_statut.configure(text="✓ Photo enregistrée !", text_color=VERT)
+        app.after(1200, ouvrir_interface)
+    except Exception as e:
+        lbl_statut.configure(text=f"✗ Erreur sauvegarde : {e}", text_color=ROUGE)
 
 def ouvrir_interface():
     app.destroy()
     import interface_principale
 
-# ── Bouton fermer ────────────────────────────────────────────────────────
-btn_bot = ctk.CTkButton(
-    app,
-    text="✘",
-    font=("Melon Milk", 24, "bold"),
-    text_color=BRUN_BOIS,
-    width=50, height=50,
-    fg_color=PARCHEMIN,
-    hover_color=OR,
-    corner_radius=0,
-    border_width=0,
-    command=ouvrir_interface
-)
-btn_bot.place(x=350, y=0)
+# ── Boutons ───────────────────────────────────────────────────────────────
+ctk.CTkButton(app, text="📂  Choisir une image",
+              command=choisir_image,
+              font=("Arial", 18, "bold"), text_color=BLANC,
+              fg_color=BRUN_BOIS, hover_color=OR,
+              corner_radius=8, width=220, height=44).place(x=90, y=295)
 
-# ── Lancement de la fenêtre ────────────────────────────────────────────────
+ctk.CTkButton(app, text="💾  Enregistrer",
+              command=enregistrer,
+              font=("Arial", 18, "bold"), text_color=BLANC,
+              fg_color=VERT, hover_color="#3D9B55",
+              corner_radius=8, width=220, height=44).place(x=90, y=360)
+
+ctk.CTkButton(app, text="← Retour",
+              command=ouvrir_interface,
+              font=("Arial", 13), text_color=BRUN_BOIS,
+              fg_color=PARCHEMIN, hover_color=OR,
+              corner_radius=6, width=100, height=30).place(x=150, y=500)
+
 app.mainloop()
