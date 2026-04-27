@@ -31,17 +31,22 @@ bg_label.place(x=0, y=0, relwidth=1, relheight=1)
 
 icone = ctk.CTkImage(light_image=Image.open("images/bot.png"), size=(50, 50))
 
+def ouvrir_interface():
+    app.destroy()
+    import interface_principal
+
 # ── Bouton fermer ────────────────────────────────────────────────────────
 btn_bot = ctk.CTkButton(
     app,
-    text="",
+    text="✘",
     font=("Melon Milk", 24, "bold"),
     text_color=BRUN_BOIS,
     width=50, height=50,
     fg_color=PARCHEMIN,
     hover_color=OR,
     corner_radius=0,
-    border_width=0
+    border_width=0,
+    command=ouvrir_interface
 )
 btn_bot.place(x=350, y=0)
 
