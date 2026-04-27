@@ -36,6 +36,14 @@ bg_image = ctk.CTkImage(light_image=base_img, size=(400, 500))
 bg_label = ctk.CTkLabel(app, image=bg_image, text="")
 bg_label.place(x=0, y=0, relwidth=1, relheight=1)
 
+def ouvrir_inscription():
+    app.destroy()
+    import interface_créersoncompte
+
+def ouvrir_interface():
+    app.destroy()
+    import interface_principal
+
 # ── Champs de saisie ───────────────────────────────────────────────────────
 textbox_pseudo = ctk.CTkEntry(
     app,
@@ -70,7 +78,8 @@ btn_valider = ctk.CTkButton(
     fg_color=BRUN_BOIS,
     hover_color=OR,
     corner_radius=8,
-    border_width=0
+    border_width=0,
+    command=ouvrir_interface
 )
 btn_valider.place(x=120, y=350)
 
@@ -83,7 +92,8 @@ btn_compte = ctk.CTkButton(
     fg_color=PARCHEMIN,
     hover_color=OR,
     corner_radius=6,
-    border_width=0
+    border_width=0,
+    command=ouvrir_inscription
 )
 btn_compte.place(x=220, y=455)
 

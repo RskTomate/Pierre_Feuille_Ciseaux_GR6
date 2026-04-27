@@ -37,6 +37,10 @@ bg_image = ctk.CTkImage(light_image=base_img, size=(400, 500))
 bg_label = ctk.CTkLabel(app, image=bg_image, text="")
 bg_label.place(x=0, y=0, relwidth=1, relheight=1)
 
+def ouvrir_connexion():
+    app.destroy()
+    import Interface_Connexion
+
 # ── Champ pseudo ──────────────────────────────────────────────────────────
 entry_pseudo = ctk.CTkEntry(
     app,
@@ -85,7 +89,8 @@ btn_valider = ctk.CTkButton(
     fg_color=BRUN_BOIS,
     hover_color=OR,
     corner_radius=8,
-    border_width=0
+    border_width=0,
+    command=ouvrir_connexion
 )
 btn_valider.place(x=40, y=420)
 
@@ -99,7 +104,8 @@ btn_connexion = ctk.CTkButton(
     fg_color=PARCHEMIN,
     hover_color=OR,
     corner_radius=6,
-    border_width=0
+    border_width=0,
+    command=ouvrir_connexion
 )
 btn_connexion.place(x=250, y=455)
 

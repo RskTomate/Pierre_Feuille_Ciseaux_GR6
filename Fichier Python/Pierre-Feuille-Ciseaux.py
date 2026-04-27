@@ -3,9 +3,9 @@ import customtkinter as ctk
 import tkinter as tk
 from PIL import Image , ImageTk
 from random import randint
-import time
 import subprocess
 import sys
+import socket
 
 # ── Initialisation du jeu ────────────────────────────────── 
 

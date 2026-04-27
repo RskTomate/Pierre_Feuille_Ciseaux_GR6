@@ -1,5 +1,13 @@
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageFont
+import socket
+
+def init_jeu():
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.connect(("10.16.25.7", 5000))  # remplace par l'IP de l'autre machine
+    client.send("Bonjour !".encode())
+    client.close()
+
 
 # ── Paramètres de la fenêtre ───────────────────────────────────────────────
 ctk.set_appearance_mode("light")
@@ -15,15 +23,6 @@ TEXTE_FONCE = "#2C1A0E"
 
 # ── Image de fond ──────────────────────────────────────────────────────────
 base_img = Image.open("images/interface_principal.png").resize((1000, 800), Image.LANCZOS)
-draw = ImageDraw.Draw(base_img)
-
-try:
-    font_titre = ImageFont.truetype("arial.ttf", 48)
-    font_label = ImageFont.truetype("arial.ttf", 30)
-except:
-    font_titre = ImageFont.load_default()
-    font_label = font_titre
-
 
 bg_image = ctk.CTkImage(light_image=base_img, size=(1000, 800))
 bg_label = ctk.CTkLabel(app, image=bg_image, text="")
@@ -150,4 +149,5 @@ btn_photoprofil = ctk.CTkButton(
 btn_photoprofil.place(x=30, y=700)
 
 # ── Lancement de la fenêtre ────────────────────────────────────────────────
+init_jeu()
 app.mainloop()
