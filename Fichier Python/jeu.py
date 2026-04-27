@@ -131,7 +131,7 @@ def lancer(client, username, mode="bot"):
     texte_contour(200, 250, username, ("Lemon Milk", 30, "bold"), "red")
 
     nom_j2_initial = ROBOT_NOM if is_bot else "Recherche…"
-    s["nom_j2_item"] = texte_contour(800, 250, nom_j2_initial, ("Lemon Milk", 30, "bold"), "blue")
+    s["nom_j2_item"] = texte_contour(800, 250, nom_j2_initial, ("Lemon Milk", 30, "bold"), "blue", tag="nom_j2")
 
     # ── Photos de profil ──────────────────────────────────────────
     pdp_j1_pil = _charger_pdp_joueur(150)
@@ -216,14 +216,20 @@ def lancer(client, username, mode="bot"):
         # Informer le serveur de notre game_id (pour J1 qui était en file)
         client.set_game(game_id)
 
-        # Mettre à jour le nom J2
-        canvas.delete(s["nom_j2_item"])
-        s["nom_j2_item"] = texte_contour(800, 250, opponent, ("Lemon Milk", 30, "bold"), "blue")
-
-        # Supprimer le texte "Recherche…"
+        # Supprimer le texte animé "Recherche d'un adversaire…"
         if s["waiting_item"]:
             canvas.delete(s["waiting_item"])
             s["waiting_item"] = None
+
+        # Supprimer TOUS les items du tag "nom_j2" (texte + ombres)
+        canvas.delete("nom_j2")
+        s["nom_j2_item"] = texte_contour(800, 250, opponent, ("Lemon Milk", 30, "bold"), "blue", tag="nom_j2")
+
+        # Mettre à jour la photo de profil de l'adversaire (placeholder → avatar neutre)
+        pdp_adv_pil = _charger_pdp_adversaire(150)
+        pdp_adv_ctk = ctk.CTkImage(light_image=pdp_adv_pil, size=(150, 150))
+        lbl_j2.configure(image=pdp_adv_ctk)
+        lbl_j2.ctk_image = pdp_adv_ctk
 
         # Afficher le statut
         s["status_item"] = canvas.create_text(
@@ -448,27 +454,31 @@ def lancer(client, username, mode="bot"):
         if s["fin_manche"]:
             return
 
-        if cpt >= 0:
-            if s["barre"]:
-                s["barre"].set(b)
-            if s["t"]:
-                canvas.itemconfig(s["t"], text=f"{cpt} s")
-            app.after(1000, Temps_reseau, cpt-1, round(b-0.1, 1))
+        if s["barre"]:
+            s["barre"].set(b)
+        if s["t"]:
+            canvas.itemconfig(s["t"], text=f"{cpt} s")
 
-        if cpt == 0 and not s["j1_a_pick"]:
-            try:
-                img = Image.open("images/Croix_rouge.png").convert("RGBA").resize((120, 100))
-                tk_img = ImageTk.PhotoImage(img)
-                canvas.j1_img = tk_img
-                if s["chxj1"]:
-                    canvas.delete(s["chxj1"])
-                s["chxj1"] = canvas.create_image(360, 360, anchor="center", image=tk_img)
-            except Exception:
-                pass
-            s["j1_a_pick"] = True
-            s["pick_j1"] = 4
-
-        if cpt == 0:
+        if cpt > 0:
+            # Continuer le décompte
+            app.after(1000, Temps_reseau, cpt - 1, round(b - 0.1, 1))
+        else:
+            # Temps écoulé : afficher croix si J1 n'a pas joué, puis verrouiller
+            if not s["j1_a_pick"]:
+                try:
+                    img = Image.open("images/Croix_rouge.png").convert("RGBA").resize((120, 100))
+                    tk_img = ImageTk.PhotoImage(img)
+                    canvas.j1_img = tk_img
+                    if s["chxj1"]:
+                        canvas.delete(s["chxj1"])
+                    s["chxj1"] = canvas.create_image(360, 360, anchor="center", image=tk_img)
+                except Exception:
+                    pass
+                s["j1_a_pick"] = True
+                s["pick_j1"] = 4
+                # Envoyer quand même un choix nul au serveur pour débloquer la manche
+                if not is_bot and s["game_id"]:
+                    client.action(4)
             s["lock"] = True
             # La résolution arrive via _on_round_result (callback réseau)
 
