@@ -92,6 +92,7 @@ def lancer(client, username, mode="bot"):
         waiting_item=None,      # item canvas "Recherche adversaire…"
         status_item=None,       # item canvas statut (attente prêt adversaire)
         nom_j2_item=None,       # item canvas du nom de l'adversaire
+        pdp_j2_ref=None,        # référence CTkImage J2 (anti garbage-collector)
     )
 
     # ── mode bot : J2 est le serveur, pas besoin d'attendre ───────────────
@@ -225,11 +226,13 @@ def lancer(client, username, mode="bot"):
         canvas.delete("nom_j2")
         s["nom_j2_item"] = texte_contour(800, 250, opponent, ("Lemon Milk", 30, "bold"), "blue", tag="nom_j2")
 
-        # Mettre à jour la photo de profil de l'adversaire (placeholder → avatar neutre)
+        # Mettre à jour la photo de profil de l'adversaire
         pdp_adv_pil = _charger_pdp_adversaire(150)
         pdp_adv_ctk = ctk.CTkImage(light_image=pdp_adv_pil, size=(150, 150))
+        s["pdp_j2_ref"] = pdp_adv_ctk   # garder en vie (anti garbage-collector)
         lbl_j2.configure(image=pdp_adv_ctk)
         lbl_j2.ctk_image = pdp_adv_ctk
+        app.update_idletasks()           # forcer le rafraîchissement du widget
 
         # Afficher le statut
         s["status_item"] = canvas.create_text(
@@ -463,7 +466,7 @@ def lancer(client, username, mode="bot"):
             # Continuer le décompte
             app.after(1000, Temps_reseau, cpt - 1, round(b - 0.1, 1))
         else:
-            # Temps écoulé : afficher croix si J1 n'a pas joué, puis verrouiller
+            # Temps écoulé : si J1 n'a pas joué, afficher croix et envoyer un choix auto
             if not s["j1_a_pick"]:
                 try:
                     img = Image.open("images/Croix_rouge.png").convert("RGBA").resize((120, 100))
@@ -476,11 +479,12 @@ def lancer(client, username, mode="bot"):
                     pass
                 s["j1_a_pick"] = True
                 s["pick_j1"] = 4
-                # Envoyer quand même un choix nul au serveur pour débloquer la manche
+                # Envoyer un choix aléatoire valide (1/2/3) pour débloquer le serveur
                 if not is_bot and s["game_id"]:
-                    client.action(4)
+                    choix_auto = randint(1, 3)
+                    client.action(choix_auto)
             s["lock"] = True
-            # La résolution arrive via _on_round_result (callback réseau)
+            # La résolution arrive via _on_round_result — on attend sans bloquer
 
     def Init_Manche():
         s["j1_a_pick"] = False

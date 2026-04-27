@@ -43,7 +43,7 @@ def lancer(client, username):
         pdp_pil = pdp_pil.resize((60, 60), Image.LANCZOS)
         pdp_ctk = ctk.CTkImage(light_image=pdp_pil, size=(60, 60))
         lbl_pdp = ctk.CTkLabel(app, image=pdp_ctk, text="")
-        lbl_pdp.place(x=928, y=8)
+        lbl_pdp.place(x=700, y=740)
         lbl_pdp.ctk_image = pdp_ctk
 
     # ── Handlers ──────────────────────────────────────────────────
