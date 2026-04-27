@@ -64,7 +64,6 @@ def on_message(msg):
         t = msg.get("type", "")
         if t == "ok":
             label_statut.configure(text=f"✓ {msg.get('msg','')}", text_color=VERT)
-            client.send_profile_picture()
             app.after(800, ouvrir_menu)
         elif t == "error":
             label_statut.configure(text=f"✗ {msg.get('msg','')}", text_color=ROUGE)

@@ -108,6 +108,8 @@ def lancer(client, username):
         try:
             save_img = _state["preview_pil"].resize((256, 256), Image.LANCZOS)
             save_img.save(PDP_SAVE_PATH, "PNG")
+            # Envoyer la nouvelle photo au serveur immédiatement
+            client.send_profile_picture()
             lbl_statut.configure(text="✓ Photo enregistrée !", text_color=VERT)
             app.after(1200, retour)
         except Exception as e:
