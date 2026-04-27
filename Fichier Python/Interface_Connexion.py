@@ -18,7 +18,7 @@ TEXTE_FONCE = "#2C1A0E"
 ROUGE       = "#8B1A1A"
 VERT        = "#2A6B3A"
 
-client = GameClient(host="127.0.0.1", port=5000)
+client = GameClient(host="10.16.25.7", port=5000)
 try:
     client.connect()
 except Exception:

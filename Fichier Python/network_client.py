@@ -22,7 +22,6 @@ class GameClient:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((self.host, self.port))
         self.connected = True
-        # Thread d'écoute en arrière-plan
         t = threading.Thread(target=self._recv_loop, daemon=True)
         t.start()
 
@@ -48,14 +47,28 @@ class GameClient:
     def login(self, username: str, password: str):
         self.send({"cmd": "LOGIN", "username": username, "password": password})
 
-    def play(self):
-        self.send({"cmd": "PLAY"})
+    def play_bot(self):
+        self.send({"cmd": "PLAY_BOT"})
 
-    def action(self, action: str):
-        self.send({"cmd": "ACTION", "action": action})
+    def play_1v1(self):
+        self.send({"cmd": "PLAY_1V1"})
+
+    def play_tournament(self):
+        self.send({"cmd": "PLAY_TOURNAMENT"})
+
+    # Ancienne méthode conservée pour compatibilité
+    def play(self):
+        self.play_bot()
+
+    def action(self, choice: int):
+        """Envoie le choix du joueur : 1=Pierre, 2=Feuille, 3=Ciseaux."""
+        self.send({"cmd": "ACTION", "choice": choice})
 
     def quit_game(self):
         self.send({"cmd": "QUIT"})
+
+    def ack_game_over(self):
+        self.send({"cmd": "GAME_OVER_ACK"})
 
     # ── Réception (thread interne) ─────────────────────────────────────────
     def set_on_message(self, callback):
