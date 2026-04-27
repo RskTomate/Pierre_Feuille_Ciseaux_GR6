@@ -1,6 +1,5 @@
 """
 network_client.py — Module réseau réutilisable pour le client du jeu.
-Gère la connexion TCP au serveur et l'envoi/réception de messages JSON.
 """
 import socket
 import json
@@ -14,17 +13,13 @@ class GameClient:
         self.sock = None
         self.connected = False
         self._buffer = ""
-        self._on_message = None   # callback(dict) appelé à chaque message reçu
+        self._on_message = None
 
-    # ── Connexion ──────────────────────────────────────────────────────────
     def connect(self):
-        """Ouvre la connexion TCP. Lève une exception si le serveur est inaccessible."""
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((self.host, self.port))
         self.connected = True
-        # Thread d'écoute en arrière-plan
-        t = threading.Thread(target=self._recv_loop, daemon=True)
-        t.start()
+        threading.Thread(target=self._recv_loop, daemon=True).start()
 
     def disconnect(self):
         self.connected = False
@@ -34,32 +29,39 @@ class GameClient:
             except Exception:
                 pass
 
-    # ── Envoi ──────────────────────────────────────────────────────────────
     def send(self, data: dict):
         if not self.connected:
             raise RuntimeError("Non connecté au serveur.")
-        msg = json.dumps(data) + "\n"
-        self.sock.sendall(msg.encode())
+        self.sock.sendall((json.dumps(data) + "\n").encode())
 
-    # ── Commandes haut niveau ──────────────────────────────────────────────
-    def register(self, username: str, password: str):
+    # ── Commandes ──────────────────────────────────────────────────────────
+    def register(self, username, password):
         self.send({"cmd": "REGISTER", "username": username, "password": password})
 
-    def login(self, username: str, password: str):
+    def login(self, username, password):
         self.send({"cmd": "LOGIN", "username": username, "password": password})
 
-    def play(self):
-        self.send({"cmd": "PLAY"})
+    def play_bot(self):
+        self.send({"cmd": "PLAY_BOT"})
 
-    def action(self, action: str):
-        self.send({"cmd": "ACTION", "action": action})
+    def play_1v1(self):
+        self.send({"cmd": "PLAY_1V1"})
+
+    def play_tournament(self):
+        self.send({"cmd": "PLAY_TOURNAMENT"})
+
+    def action(self, choice: int):
+        """choice : 1=Pierre, 2=Feuille, 3=Ciseaux"""
+        self.send({"cmd": "ACTION", "choice": choice})
 
     def quit_game(self):
         self.send({"cmd": "QUIT"})
 
-    # ── Réception (thread interne) ─────────────────────────────────────────
+    def ack_game_over(self):
+        self.send({"cmd": "GAME_OVER_ACK"})
+
+    # ── Réception ─────────────────────────────────────────────────────────
     def set_on_message(self, callback):
-        """Enregistre le callback appelé pour chaque message serveur reçu."""
         self._on_message = callback
 
     def _recv_loop(self):
