@@ -11,6 +11,8 @@ import random
 # ─────────────────────────────────────────────
 USERS_FILE = "users.json"
 
+STATS_FILE = "stats.json"
+
 def load_users():
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, "r") as f:
@@ -20,6 +22,28 @@ def load_users():
 def save_users(users):
     with open(USERS_FILE, "w") as f:
         json.dump(users, f, indent=2)
+
+def load_stats():
+    if os.path.exists(STATS_FILE):
+        with open(STATS_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_stats(stats):
+    with open(STATS_FILE, "w") as f:
+        json.dump(stats, f, indent=2)
+
+def record_result(winner, loser):
+    """Met à jour les victoires/défaites des deux joueurs (ignoré si BOT)."""
+    stats = load_stats()
+    for u in [winner, loser]:
+        if u and u != "BOT" and u not in stats:
+            stats[u] = {"wins": 0, "losses": 0}
+    if winner and winner != "BOT":
+        stats[winner]["wins"] = stats[winner].get("wins", 0) + 1
+    if loser and loser != "BOT":
+        stats[loser]["losses"] = stats[loser].get("losses", 0) + 1
+    save_stats(stats)
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -168,6 +192,7 @@ def process_choices(game_id):
     # Vérifier si la partie est finie (premier à 3)
     if s1 >= 3 or s2 >= 3:
         game_winner = p1 if s1 >= 3 else p2
+        game_loser  = p2 if s1 >= 3 else p1
         game["state"] = "finished"
         broadcast_game(game_id, {
             "type":    "game_over",
@@ -176,6 +201,8 @@ def process_choices(game_id):
             "scores":  {p1: s1, p2: s2},
             "msg":     f"{game_winner} remporte la partie !",
         })
+        # Enregistrer victoire/défaite (hors BOT)
+        record_result(game_winner, game_loser)
         tid = game.get("tournament_id")
         if tid:
             tournament_advance(tid, game["match_key"], game_winner)
@@ -476,6 +503,28 @@ def handle_client(conn, addr):
                             send(conn, {"type": "error", "msg": "Choix invalide (1=Pierre, 2=Feuille, 3=Ciseaux)."})
                         else:
                             cmd_action(username, current_game, choice)
+
+                elif cmd == "GET_STATS":
+                    if not username:
+                        send(conn, {"type": "error", "msg": "Connecte-toi d'abord."})
+                    else:
+                        stats = load_stats()
+                        u_stats = stats.get(username, {"wins": 0, "losses": 0})
+                        send(conn, {
+                            "type":   "stats",
+                            "wins":   u_stats.get("wins", 0),
+                            "losses": u_stats.get("losses", 0),
+                        })
+
+                elif cmd == "GET_LEADERBOARD":
+                    stats = load_stats()
+                    leaderboard = sorted(
+                        [{"username": u, "wins": v.get("wins", 0), "losses": v.get("losses", 0)}
+                         for u, v in stats.items()],
+                        key=lambda x: x["wins"],
+                        reverse=True
+                    )
+                    send(conn, {"type": "leaderboard", "data": leaderboard})
 
                 elif cmd == "GAME_OVER_ACK":
                     current_game = None

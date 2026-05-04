@@ -57,6 +57,97 @@ def lancer(client, username):
         import interface_photo_de_profil
         interface_photo_de_profil.lancer(client, username)
 
+    def ouvrir_classement():
+        """Fenêtre classement — demande GET_LEADERBOARD au serveur."""
+        win = ctk.CTkToplevel(app)
+        win.title("Classement")
+        win.geometry("420x520")
+        win.configure(fg_color="#7B8B8E")
+        win.grab_set()
+
+        ctk.CTkLabel(win, text="🏆 Classement", font=("Arial", 22, "bold"),
+                     text_color=PARCHEMIN, fg_color="transparent").pack(pady=16)
+
+        frame = ctk.CTkScrollableFrame(win, width=380, height=380, fg_color="#4a5a5e")
+        frame.pack(padx=10, pady=4)
+
+        lbl_attente = ctk.CTkLabel(frame, text="Chargement…", font=("Arial", 14),
+                                   text_color="#FFFFFF", fg_color="transparent")
+        lbl_attente.pack(pady=20)
+
+        def afficher_leaderboard(data):
+            lbl_attente.destroy()
+            # En-tête
+            header = ctk.CTkFrame(frame, fg_color="#2a3a3e", corner_radius=6)
+            header.pack(fill="x", padx=4, pady=2)
+            ctk.CTkLabel(header, text="#",        width=40,  font=("Arial", 13, "bold"), text_color=PARCHEMIN).grid(row=0, column=0, padx=4)
+            ctk.CTkLabel(header, text="Pseudo",   width=180, font=("Arial", 13, "bold"), text_color=PARCHEMIN).grid(row=0, column=1, padx=4)
+            ctk.CTkLabel(header, text="Victoires",width=90,  font=("Arial", 13, "bold"), text_color=PARCHEMIN).grid(row=0, column=2, padx=4)
+            
+            medailles = ["1", "2", "3"]
+            for i, entry in enumerate(data):
+                bg = "#1a2a2e" if i % 2 == 0 else "#263036"
+                row_frame = ctk.CTkFrame(frame, fg_color=bg, corner_radius=4)
+                row_frame.pack(fill="x", padx=4, pady=1)
+                rang = medailles[i] if i < 3 else str(i + 1)
+                tc = "#FFD700" if i == 0 else "#C0C0C0" if i == 1 else "#CD7F32" if i == 2 else "#FFFFFF"
+                ctk.CTkLabel(row_frame, text=rang,                 width=40,  font=("Arial", 13), text_color=tc).grid(row=0, column=0, padx=4, pady=3)
+                ctk.CTkLabel(row_frame, text=entry["username"],    width=180, font=("Arial", 13), text_color="#FFFFFF").grid(row=0, column=1, padx=4)
+                ctk.CTkLabel(row_frame, text=str(entry["wins"]),   width=90,  font=("Arial", 13, "bold"), text_color="#4CAF50").grid(row=0, column=2, padx=4)
+
+        def on_msg_lb(msg):
+            if msg.get("type") == "leaderboard":
+                win.after(0, lambda: afficher_leaderboard(msg.get("data", [])))
+                client.set_on_message(None)  # libérer le callback temporaire
+
+        client.set_on_message(on_msg_lb)
+        client.send({"cmd": "GET_LEADERBOARD"})
+
+    def ouvrir_statistiques():
+        """Fenêtre statistiques — demande GET_STATS au serveur."""
+        win = ctk.CTkToplevel(app)
+        win.title("Statistiques")
+        win.geometry("360x300")
+        win.configure(fg_color="#7B8B8E")
+        win.grab_set()
+
+        ctk.CTkLabel(win, text="📊 Mes Statistiques", font=("Arial", 22, "bold"),
+                     text_color=PARCHEMIN, fg_color="transparent").pack(pady=20)
+
+        frame = ctk.CTkFrame(win, fg_color="#4a5a5e", corner_radius=10)
+        frame.pack(padx=24, pady=8, fill="x")
+
+        lbl_attente = ctk.CTkLabel(frame, text="Chargement…", font=("Arial", 14),
+                                   text_color="#FFFFFF", fg_color="transparent")
+        lbl_attente.pack(pady=20)
+
+        def afficher_stats(wins, losses):
+            lbl_attente.destroy()
+            total = wins + losses
+            ratio = f"{wins/total*100:.0f}%" if total > 0 else "—"
+            for label, valeur, couleur in [
+                ("Victoires 🏆", str(wins),  "#4CAF50"),
+                ("Défaites  💀", str(losses), "#F44336"),
+                ("Parties jouées", str(total), "#FFFFFF"),
+                ("Taux de victoire", ratio,    PARCHEMIN),
+            ]:
+                row = ctk.CTkFrame(frame, fg_color="transparent")
+                row.pack(fill="x", padx=16, pady=6)
+                ctk.CTkLabel(row, text=label, font=("Arial", 15), text_color="#CCCCCC",
+                             fg_color="transparent").pack(side="left")
+                ctk.CTkLabel(row, text=valeur, font=("Arial", 15, "bold"),
+                             text_color=couleur, fg_color="transparent").pack(side="right")
+
+        def on_msg_stats(msg):
+            if msg.get("type") == "stats":
+                wins   = msg.get("wins", 0)
+                losses = msg.get("losses", 0)
+                win.after(0, lambda: afficher_stats(wins, losses))
+                client.set_on_message(None)
+
+        client.set_on_message(on_msg_stats)
+        client.send({"cmd": "GET_STATS"})
+
     # ── Style commun des boutons ──────────────────────────────────
     btn_style = dict(
         font=("Melon Milk", 22, "bold"),
@@ -77,17 +168,11 @@ def lancer(client, username):
                   image=icone2, width=300, height=200,
                   command=lambda: go("1v1"),        **btn_style).place(x=355, y=50)
 
-    ctk.CTkButton(app, text="Tournoi",
-                  image=icone3, width=300, height=200,
-                  command=lambda: go("tournament"), **btn_style).place(x=680, y=50)
-
     # ── Boutons secondaires ───────────────────────────────────────
-    ctk.CTkButton(app, text="Amis",            image=icone4, width=300, height=75,
-                  **btn_style).place(x=30, y=400)
     ctk.CTkButton(app, text="Classement",      image=icone5, width=300, height=75,
-                  **btn_style).place(x=30, y=500)
+                  command=ouvrir_classement,   **btn_style).place(x=30, y=500)
     ctk.CTkButton(app, text="Statistiques",    image=icone6, width=300, height=75,
-                  **btn_style).place(x=30, y=600)
+                  command=ouvrir_statistiques, **btn_style).place(x=30, y=600)
     ctk.CTkButton(app, text="Photo de profil", image=icone7, width=300, height=75,
                   command=ouvrir_photo_profil,  **btn_style).place(x=30, y=700)
 

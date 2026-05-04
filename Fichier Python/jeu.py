@@ -1,7 +1,7 @@
 """
 jeu.py — Écran de jeu Pierre Feuille Ciseaux.
 Appelé via lancer(client, username, mode) depuis interface_principale.
-Modes : "bot", "1v1", "tournament"
+Modes : "bot", "1v1"
 """
 import customtkinter as ctk
 import tkinter as tk
@@ -260,7 +260,7 @@ def lancer(client, username, mode="bot"):
         """L'adversaire a cliqué Prêt."""
         s["adv_est_pret"] = True
         if s["status_item"]:
-            canvas.itemconfig(s["status_item"], text="L'adversaire est prêt !\nCliquez sur Prêt quand vous êtes prêt.")
+            canvas.itemconfig(s["status_item"], text="L'adversaire est prêt !\nCliquez sur Prêt quand \nvous êtes prêt.")
 
     def _on_game_start(game_id, players):
         """Les deux joueurs sont prêts : lancer le jeu."""
@@ -401,7 +401,7 @@ def lancer(client, username, mode="bot"):
         if not (s["pret_j1"] and s["pret_j2"]):
             if s["waiting_item"]:
                 dots = "." * points
-                canvas.itemconfig(s["waiting_item"], text=f"Recherche d'un adversaire{dots}")
+                canvas.itemconfig(s["waiting_item"], text=f"Recherche d'un \nadversaire{dots}")
             app.after(500, Wait, (points % 3) + 1)
 
     def Lancer_jeu():
@@ -442,20 +442,31 @@ def lancer(client, username, mode="bot"):
 
     # ── Timer mode BOT (résolution locale) ───────────────────────
     def Temps(cpt=10, b=1.0):
-        if cpt >= 0:
+        if s["fin_manche"]:
+            return
+        if s["barre"]:
             s["barre"].set(b)
+        if s["t"]:
             canvas.itemconfig(s["t"], text=f"{cpt} s")
-            app.after(1000, Temps, cpt-1, round(b-0.1, 1))
-        if cpt == 0 and not s["j1_a_pick"]:
-            img = Image.open("images/Croix_rouge.png").convert("RGBA").resize((120, 100))
-            tk_img = ImageTk.PhotoImage(img)
-            canvas.j1_img = tk_img
-            if s["chxj1"]:
-                canvas.delete(s["chxj1"])
-            s["chxj1"] = canvas.create_image(360, 360, anchor="center", image=tk_img)
-            s["j1_a_pick"] = True
-            s["pick_j1"] = 4
-        if cpt == 0:
+
+        if cpt > 0:
+            app.after(1000, Temps, cpt - 1, round(b - 0.1, 1))
+        else:
+            # Temps écoulé : choix aléatoire si le joueur n'a pas joué
+            if not s["j1_a_pick"]:
+                choix_auto = randint(1, 3)
+                noms_auto = {1: "images/pierre.png", 2: "images/Feuille.png", 3: "images/Ciseaux.png"}
+                try:
+                    img = Image.open(noms_auto[choix_auto]).convert("RGBA").resize((120, 100))
+                    tk_img = ImageTk.PhotoImage(img)
+                    canvas.j1_img = tk_img
+                    if s["chxj1"]:
+                        canvas.delete(s["chxj1"])
+                    s["chxj1"] = canvas.create_image(360, 360, anchor="center", image=tk_img)
+                except Exception:
+                    pass
+                s["j1_a_pick"] = True
+                s["pick_j1"] = choix_auto
             s["lock"] = True
             _afficher_choix_j2(s["pick_j2"])
             FinManche()
@@ -568,6 +579,19 @@ def lancer(client, username, mode="bot"):
         app.destroy()
         import interface_principale
         interface_principale.lancer(client, username)
+
+    def on_fermeture():
+        """Appelé quand l'utilisateur ferme la fenêtre du jeu."""
+        try:
+            if s.get("game_id") and not is_bot:
+                client.quit_game()
+            client.disconnect()
+        except Exception:
+            pass
+        app.destroy()
+        import Interface_Connexion  # noqa — relance l'écran de connexion
+
+    app.protocol("WM_DELETE_WINDOW", on_fermeture)
 
     # ── Démarrage ─────────────────────────────────────────────────
     if is_bot:
